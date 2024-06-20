@@ -541,24 +541,21 @@ def _pprpa_print_eigenvector(
     multiplicity = []
     excitation_energy = []
     two_e = []
-    pair_dfs = []
+    e1_lst = []
+    e2_lst = []
+    p_lst = []
+
     if channel == "pp":
         for iroot in range(nroot):
             n = iroot + 1
             m = multi
             e = (exci[iroot] - exci0) * au2ev
             t = exci[iroot] * au2ev
-            root_numers.append(n)
-            multiplicity.append(m)
-            excitation_energy.append(e)
-            two_e.append(t)
 
             print("#%-d %s excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV" %
                   (n, m, e, t))
            
-            e1_lst = []
-            e2_lst = []
-            p_lst = []
+
             if nocc > 0:
                 full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
                 full[tri_row_o, tri_col_o] = xy[iroot][:oo_dim]
@@ -570,6 +567,10 @@ def _pprpa_print_eigenvector(
                     e1_lst.append(e1)
                     e2_lst.append(e2)
                     p_lst.append(p)
+                    root_numers.append(n)
+                    multiplicity.append(m)
+                    excitation_energy.append(e)
+                    two_e.append(t)
 
             full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
             full[tri_row_v, tri_col_v] = xy[iroot][oo_dim:]
@@ -581,14 +582,11 @@ def _pprpa_print_eigenvector(
                 e1_lst.append(e1)
                 e2_lst.append(e2)
                 p_lst.append(p)
+                root_numers.append(n)
+                multiplicity.append(m)
+                excitation_energy.append(e)
+                two_e.append(t)
 
-            pair_df = pd.DataFrame({
-                "e1": e1_lst,
-                "e2": e2_lst,
-                "percentage": p_lst
-            })
-            pair_dfs.append(pair_df)
-           
             print("")
     else:
         for iroot in range(nroot):
@@ -596,27 +594,24 @@ def _pprpa_print_eigenvector(
             m = multi
             e = (exci[iroot] - exci0) * au2ev
             t = exci[iroot] * au2ev
-            root_numers.append(n)
-            multiplicity.append(m)
-            excitation_energy.append(e)
-            two_e.append(t)
 
             print("#%-d %s de-excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV" %
                   (n, m, e, t))
             
-            e1_lst = []
-            e2_lst = []
-            p_lst = []
             full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
             full[tri_row_o, tri_col_o] = xy[iroot][:oo_dim]
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
+
             for i, j in pairs:
                 e1, e2, p = pprpa_print_a_pair(is_pp=False, p=i, q=j, percentage=full[i, j])
                 e1_lst.append(e1)
                 e2_lst.append(e2)
                 p_lst.append(p)
-
+                root_numers.append(n)
+                multiplicity.append(m)
+                excitation_energy.append(e)
+                two_e.append(t)
 
             if nvir > 0:
                 full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
@@ -629,21 +624,21 @@ def _pprpa_print_eigenvector(
                     e1_lst.append(e1)
                     e2_lst.append(e2)
                     p_lst.append(p)
+                    root_numers.append(n)
+                    multiplicity.append(m)
+                    excitation_energy.append(e)
+                    two_e.append(t)
 
-            pair_df = pd.DataFrame({
-                "e1": e1_lst,
-                "e2": e2_lst,
-                "percentage": p_lst
-            })
-            pair_dfs.append(pair_df)
             print("")
 
     result_df = pd.DataFrame({
         "root_number": root_numers,
         "multiplicity": multiplicity,
-        "excitation_energy": excitation_energy,
+        "dE": excitation_energy,
         "two_e": two_e,
-        "pair_df": pair_dfs
+        "e1": e1_lst,
+        "e2": e2_lst,
+        "percentage": p_lst
     })
 
     return result_df
