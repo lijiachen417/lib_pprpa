@@ -1,5 +1,6 @@
 import numpy
 import time
+from datetime import datetime as dt
 
 
 def ij2index(r, c, row, col):
@@ -167,7 +168,7 @@ def start_clock(clock_name):
     assert isinstance(clock_name, str) and clock_name not in clock_names
     clock_names.append(clock_name)
     clocks.append((time.process_time(), time.perf_counter()))
-    print("begin %-s." % clock_name, flush=True)
+    print("begin %-s at %s" % (clock_name, dt.now().time()), flush=True)
 
 
 def stop_clock(clock_name):
