@@ -376,20 +376,21 @@ def _analyze_pprpa_direct(
     else:
         if exci_s is not None:
             print("only singlet results found.")
+            exci0 = exci_s[oo_dim_s] if nelec == "n-2" else exci_s[oo_dim_s-1]
             s_df = _pprpa_print_eigenvector(
                 multi="s", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
                 thresh=print_thresh, hh_state=hh_state,
-                pp_state=pp_state, exci0=exci_s[oo_dim_s], exci=exci_s, xy=xy_s)
+                pp_state=pp_state, exci0=exci0, exci=exci_s, xy=xy_s)
             t_df = None
         else:
             print("only triplet results found.")
+            exci0 = exci_s[oo_dim_t] if nelec == "n-2" else exci_s[oo_dim_t-1]
             t_df = _pprpa_print_eigenvector(
                 multi="t", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
                 thresh=print_thresh, hh_state=hh_state,
-                pp_state=pp_state, exci0=exci_t[oo_dim_t], exci=exci_t, xy=xy_t)
+                pp_state=pp_state, exci0=exci0, exci=exci_t, xy=xy_t)
             s_df = None
-    return s_df, t_df
-
+    return s_df, t_df 
 
 class ppRPA_direct():
     def __init__(
