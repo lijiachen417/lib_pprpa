@@ -1,7 +1,7 @@
 import h5py
 import numpy
 import scipy
-
+import pandas as pd
 from numpy import einsum
 
 from lib_pprpa.pprpa_davidson import pprpa_orthonormalize_eigenvector, pprpa_print_a_pair
@@ -259,52 +259,96 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
     tri_row_v, tri_col_v = numpy.tril_indices(nvir, is_singlet-1)
 
     au2ev = 27.211386
-
+    e1s = []
+    e2s = []
+    percentages = []
+    dEs = []
+    two_es = []
+    mults = []
+    exi_idxs = []
+    channel = []
     for istate in range(min(hh_state, oo_dim)):
+        exi_idx = istate + 1
+        dE = (exci[oo_dim-istate-1] - exci0) * au2ev
+        two_e = exci[oo_dim-istate-1] * au2ev
         print("#%-d %s de-excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV" %
-              (istate + 1, multi, (exci[oo_dim-istate-1] - exci0) * au2ev,
-               exci[oo_dim-istate-1] * au2ev))
+              (exi_idx, multi, dE, two_e))
         full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
         full[tri_row_o, tri_col_o] = xy[oo_dim-istate-1][:oo_dim]
         full = numpy.power(full, 2)
         pairs = numpy.argwhere(full > thresh)
         for i, j in pairs:
-            pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
+            e1, e2, p = pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
                                percentage=full[i, j])
+            e1s.append(e1)            
+            e2s.append(e2)
+            percentages.append(p)
+            dEs.append(dE)
+            two_es.append(two_e)
+            mults.append(multi)
+            exi_idxs.append(exi_idx)
+            channel.append("hh")
 
         full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
         full[tri_row_v, tri_col_v] = xy[oo_dim-istate-1][oo_dim:]
         full = numpy.power(full, 2)
         pairs = numpy.argwhere(full > thresh)
         for a, b in pairs:
-            pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
+            e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
                                percentage=full[a, b])
-
+            e1s.append(e1)            
+            e2s.append(e2)
+            percentages.append(p)
+            dEs.append(dE)
+            two_es.append(two_e)
+            mults.append(multi)
+            exi_idxs.append(exi_idx)
+            channel.append("pp")
         print("")
 
+
     for istate in range(min(pp_state, vv_dim)):
+        exi_idx = istate + 1
+        dE = (exci[oo_dim+istate] - exci0) * au2ev
+        two_e = exci[oo_dim+istate] * au2ev
         print("#%-d %s excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV" %
-              (istate + 1, multi, (exci[oo_dim+istate] - exci0) * au2ev,
-               exci[oo_dim+istate] * au2ev))
+              (exi_idx, multi, dE, two_e))
         full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
         full[tri_row_o, tri_col_o] = xy[oo_dim+istate][:oo_dim]
         full = numpy.power(full, 2)
         pairs = numpy.argwhere(full > thresh)
         for i, j in pairs:
-            pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
+            e1, e2, p = pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
                                percentage=full[i, j])
+            e1s.append(e1) 
+            e2s.append(e2)
+            percentages.append(p)
+            dEs.append(dE)
+            two_es.append(two_e)
+            mults.append(multi)
+            exi_idxs.append(exi_idx)
+            channel.append("hh")
 
         full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
         full[tri_row_v, tri_col_v] = xy[oo_dim+istate][oo_dim:]
         full = numpy.power(full, 2)
         pairs = numpy.argwhere(full > thresh)
         for a, b in pairs:
-            pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
+            e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
                                percentage=full[a, b])
+            e1s.append(e1)
+            e2s.append(e2)
+            percentages.append(p)
+            dEs.append(dE)
+            two_es.append(two_e)
+            mults.append(multi)
+            exi_idxs.append(exi_idx)
+            channel.append("pp")
 
         print("")
+    df = pd.DataFrame({'e1': e1s, 'e2': e2s, 'percentage': percentages, 'dE': dEs, '2e': two_es, 'multi': mults, 'exi_idx': exi_idxs, 'channel': channel})
 
-    return
+    return df
 
 
 def _analyze_pprpa_direct(
@@ -319,12 +363,12 @@ def _analyze_pprpa_direct(
             exci0 = min(exci_s[oo_dim_s], exci_t[oo_dim_t])
         else:
             exci0 = max(exci_s[oo_dim_s-1], exci_t[oo_dim_t-1])
-        _pprpa_print_eigenvector(
+        s_df = _pprpa_print_eigenvector(
             multi="s", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
             thresh=print_thresh,
             hh_state=hh_state, pp_state=pp_state, exci0=exci0,
             exci=exci_s, xy=xy_s)
-        _pprpa_print_eigenvector(
+        t_df = _pprpa_print_eigenvector(
             multi="t", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
             thresh=print_thresh,
             hh_state=hh_state, pp_state=pp_state, exci0=exci0,
@@ -333,19 +377,20 @@ def _analyze_pprpa_direct(
         if exci_s is not None:
             print("only singlet results found.")
             exci0 = exci_s[oo_dim_s] if nelec == "n-2" else exci_s[oo_dim_s-1]
-            _pprpa_print_eigenvector(
+            s_df = _pprpa_print_eigenvector(
                 multi="s", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
                 thresh=print_thresh, hh_state=hh_state,
                 pp_state=pp_state, exci0=exci0, exci=exci_s, xy=xy_s)
+            t_df = None
         else:
             print("only triplet results found.")
             exci0 = exci_s[oo_dim_t] if nelec == "n-2" else exci_s[oo_dim_t-1]
-            _pprpa_print_eigenvector(
+            t_df = _pprpa_print_eigenvector(
                 multi="t", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
                 thresh=print_thresh, hh_state=hh_state,
                 pp_state=pp_state, exci0=exci0, exci=exci_t, xy=xy_t)
-    return
-
+            s_df = None
+    return s_df, t_df 
 
 class ppRPA_direct():
     def __init__(
@@ -480,13 +525,13 @@ class ppRPA_direct():
         return
 
     def analyze(self, nocc_fro=0):
-        _analyze_pprpa_direct(exci_s=self.exci_s, xy_s=self.xy_s,
+        s_df, t_df = _analyze_pprpa_direct(exci_s=self.exci_s, xy_s=self.xy_s,
                               exci_t=self.exci_t, xy_t=self.xy_t,
                               nocc=self.nocc, nvir=self.nvir, nelec=self.nelec,
                               print_thresh=self.print_thresh,
                               hh_state=self.hh_state,
                               pp_state=self.pp_state, nocc_fro=nocc_fro)
-        return
+        return s_df, t_df
 
     def get_correlation(self):
         self.check_parameter()
