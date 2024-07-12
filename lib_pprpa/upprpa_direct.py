@@ -4,6 +4,7 @@ Author: Jincheng Yu <pimetamon@gmail.com>
 import h5py
 import numpy
 import scipy
+import pandas as pd
 from lib_pprpa.pprpa_davidson import pprpa_orthonormalize_eigenvector, pprpa_print_a_pair
 from lib_pprpa.pprpa_util import get_chemical_potential, start_clock, stop_clock, print_citation, inner_product
 from lib_pprpa.pprpa_direct import diagonalize_pprpa_triplet
@@ -198,86 +199,164 @@ def _pprpa_print_eigenvector(subspace, nocc, nvir, nocc_fro, thresh, hh_state,
         tri_row_v, tri_col_v = numpy.tril_indices(nvir, -1)
 
     au2ev = 27.211386
+    e1s = []
+    e2s = []
+    percentages = []
+    dEs = []
+    two_es = []
+    mults = []
+    exi_idxs = []
+    channel = []
 
     # =====================> two-electron removal <======================
     for istate in range(min(hh_state, oo_dim)):
+        exi_idx = istate + 1
+        dE = (exci[oo_dim-istate-1] - exci0) * au2ev
+        two_e = exci[oo_dim-istate-1] * au2ev
+
         print("#%-d %s de-excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV" %
-              (istate + 1, subspace[:2], (exci[oo_dim-istate-1] - exci0) * au2ev,
-               exci[oo_dim-istate-1] * au2ev))
+              (exi_idx, subspace[:2], dE, two_e))
         if subspace == 'aaaa' or subspace == 'bbbb':
             full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
             full[tri_row_o, tri_col_o] = xy[oo_dim-istate-1][:oo_dim]
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for i, j in pairs:
-                pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
+                e1, e2, p = pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
                                    percentage=full[i, j])
+                e1s.append(e1)            
+                e2s.append(e2)
+                percentages.append(p)
+                dEs.append(dE)
+                two_es.append(two_e)
+                mults.append(subspace[:2])
+                exi_idxs.append(exi_idx)
+                channel.append("hh")
 
             full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
             full[tri_row_v, tri_col_v] = xy[oo_dim-istate-1][oo_dim:]
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for a, b in pairs:
-                pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc,
+                e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc,
                                    q=b+nocc_fro+nocc, percentage=full[a, b])
+                e1s.append(e1)            
+                e2s.append(e2)
+                percentages.append(p)
+                dEs.append(dE)
+                two_es.append(two_e)
+                mults.append(subspace[:2])
+                exi_idxs.append(exi_idx)
+                channel.append("pp")
 
         else:
             full = xy[oo_dim-istate-1][:oo_dim].reshape(nocc[0], nocc[1])
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for i, j in pairs:
-                pprpa_print_a_pair(is_pp=False, p=i+nocc_fro[0], q=j+nocc_fro[1],
+                e1, e2, p = pprpa_print_a_pair(is_pp=False, p=i+nocc_fro[0], q=j+nocc_fro[1],
                                    percentage=full[i, j])
-
+                e1s.append(e1)            
+                e2s.append(e2)
+                percentages.append(p)
+                dEs.append(dE)
+                two_es.append(two_e)
+                mults.append(subspace[:2])
+                exi_idxs.append(exi_idx)
+                channel.append("hh")
+                
             full = xy[oo_dim-istate-1][oo_dim:].reshape(nvir[0], nvir[1])
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for a, b in pairs:
-                pprpa_print_a_pair(is_pp=True, p=a+nocc_fro[0]+nocc[0],
+                e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro[0]+nocc[0],
                                    q=b+nocc_fro[1]+nocc[1], percentage=full[a, b])
+                e1s.append(e1)            
+                e2s.append(e2)
+                percentages.append(p)
+                dEs.append(dE)
+                two_es.append(two_e)
+                mults.append(subspace[:2])
+                exi_idxs.append(exi_idx)
+                channel.append("pp")
         print("")
 
     # =====================> two-electron addition <=====================
     for istate in range(min(pp_state, vv_dim)):
+        exi_idx = istate + 1
+        dE = (exci[oo_dim+istate] - exci0) * au2ev
+        two_e = exci[oo_dim+istate] * au2ev
         print("#%-d %s excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV" %
-              (istate + 1, subspace[:2], (exci[oo_dim+istate] - exci0) * au2ev,
-               exci[oo_dim+istate] * au2ev))
+              (exi_idx, subspace[:2], dE, two_e))
         if subspace == 'aaaa' or subspace == 'bbbb':
             full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
             full[tri_row_o, tri_col_o] = xy[oo_dim+istate][:oo_dim]
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for i, j in pairs:
-                pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
+                e1, e2, p = pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
                                    percentage=full[i, j])
+                e1s.append(e1) 
+                e2s.append(e2)
+                percentages.append(p)
+                dEs.append(dE)
+                two_es.append(two_e)
+                mults.append(subspace[:2])
+                exi_idxs.append(exi_idx)
+                channel.append("hh")
 
             full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
             full[tri_row_v, tri_col_v] = xy[oo_dim+istate][oo_dim:]
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for a, b in pairs:
-                pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc,
+                e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc,
                                    q=b+nocc_fro+nocc, percentage=full[a, b])
-
+                e1s.append(e1)
+                e2s.append(e2)
+                percentages.append(p)
+                dEs.append(dE)
+                two_es.append(two_e)
+                mults.append(subspace[:2])
+                exi_idxs.append(exi_idx)
+                channel.append("pp")
         else:
             full = xy[oo_dim+istate][:oo_dim].reshape(nocc[0], nocc[1])
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for i, j in pairs:
-                pprpa_print_a_pair(
+                e1, e2, p = pprpa_print_a_pair(
                     is_pp=False, p=i+nocc_fro[0], q=j+nocc_fro[1],
                     percentage=full[i, j])
+                e1s.append(e1)
+                e2s.append(e2)
+                percentages.append(p)
+                dEs.append(dE)
+                two_es.append(two_e)
+                mults.append(subspace[:2])
+                exi_idxs.append(exi_idx)
+                channel.append("hh")
 
             full = xy[oo_dim+istate][oo_dim:].reshape(nvir[0], nvir[1])
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for a, b in pairs:
-                pprpa_print_a_pair(
+                e1, e2, p = pprpa_print_a_pair(
                     is_pp=True, p=a+nocc_fro[0]+nocc[0],
                     q=b+nocc_fro[1]+nocc[1], percentage=full[a, b])
+                e1s.append(e1)
+                e2s.append(e2)
+                percentages.append(p)
+                dEs.append(dE)
+                two_es.append(two_e)
+                mults.append(subspace[:2])
+                exi_idxs.append(exi_idx)
+                channel.append("pp")
         print("")
 
-    return
+    df = pd.DataFrame(({'e1': e1s, 'e2': e2s, 'percentage': percentages, 'dE': dEs, '2e': two_es, 'multi': mults, 'exi_idx': exi_idxs, 'channel': channel}))
+    
+    return df
 
 
 def _analyze_pprpa_direct(
@@ -318,19 +397,19 @@ def _analyze_pprpa_direct(
         exci0 = max(exci0_list)
 
     if exci_aa is not None:
-        _pprpa_print_eigenvector(
+        aaaa_df = _pprpa_print_eigenvector(
             'aaaa', nocc[0], nvir[0], nocc_fro[0], print_thresh, hh_state,
             pp_state, exci0, exci_aa, xy[0])
     if exci_bb is not None:
-        _pprpa_print_eigenvector(
+        bbbb_df = _pprpa_print_eigenvector(
             'bbbb', nocc[1], nvir[1], nocc_fro[1], print_thresh, hh_state,
             pp_state, exci0, exci_bb, xy[1])
     if exci_ab is not None:
-        _pprpa_print_eigenvector(
+        abab_df = _pprpa_print_eigenvector(
             'abab', nocc, nvir, nocc_fro, print_thresh, hh_state,
             pp_state, exci0, exci_ab, xy[2])
 
-    pass
+    return aaaa_df, bbbb_df, abab_df
 
 
 class UppRPA_direct():
@@ -345,7 +424,13 @@ class UppRPA_direct():
     Kwargs:
         hh_state (int): number of hole-hole states to print
         pp_state (int): number of particle-particle states to print
-        nelec (str): 'n-2' for ppRPA and 'n+2' for hhRPA
+        nelec (str): 'n-2print(f"{nocc = }")
+        # we want e1 = nocc+2 and e2 = nocc+1
+        s_slice = s_df.loc[(s_df["e1"] == nocc + 2) & (s_df["e2"] == nocc + 1)]
+        weighted_dE = largest_percent_dE(s_slice)
+        corex_energy = weighted_dE["dE"].values[0]
+        # print(corex_energy)
+        return corex_energy for ppRPA and 'n+2' for hhRPA
         print_thresh (float): threshold for printing component
     """
 
@@ -525,8 +610,8 @@ class UppRPA_direct():
         return
 
     def analyze(self, nocc_fro=(0, 0)):
-        _analyze_pprpa_direct(
+        aaaa_df, bbbb_df, abab_df = _analyze_pprpa_direct(
             self.exci, self.xy, self.nocc, self.nvir, nelec=self.nelec,
             print_thresh=self.print_thresh, hh_state=self.hh_state,
             pp_state=self.pp_state, nocc_fro=nocc_fro)
-        return
+        return aaaa_df, bbbb_df, abab_df

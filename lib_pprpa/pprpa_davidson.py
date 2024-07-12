@@ -1,7 +1,7 @@
 import h5py
 import numpy
 import scipy
-
+import pandas as pd
 from numpy import einsum
 
 from lib_pprpa.pprpa_util import ij2index, inner_product, start_clock, \
@@ -534,39 +534,81 @@ def _pprpa_print_eigenvector(
 
     nroot = len(exci)
     au2ev = 27.211386
+    root_numers = []
+    multiplicity = []
+    excitation_energy = []
+    two_e = []
+    e1_lst = []
+    e2_lst = []
+    p_lst = []
+
     if channel == "pp":
         for iroot in range(nroot):
+            n = iroot + 1
+            m = multi
+            e = (exci[iroot] - exci0) * au2ev
+            t = exci[iroot] * au2ev
+
             print("#%-d %s excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV" %
-                  (iroot + 1, multi,
-                   (exci[iroot] - exci0) * au2ev, exci[iroot] * au2ev))
+                  (n, m, e, t))
+           
+
             if nocc > 0:
                 full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
                 full[tri_row_o, tri_col_o] = xy[iroot][:oo_dim]
                 full = numpy.power(full, 2)
                 pairs = numpy.argwhere(full > thresh)
                 for i, j in pairs:
-                    pprpa_print_a_pair(
+                    e1, e2, p = pprpa_print_a_pair(
                         is_pp=False, p=i, q=j, percentage=full[i, j])
+                    e1_lst.append(e1)
+                    e2_lst.append(e2)
+                    p_lst.append(p)
+                    root_numers.append(n)
+                    multiplicity.append(m)
+                    excitation_energy.append(e)
+                    two_e.append(t)
 
             full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
             full[tri_row_v, tri_col_v] = xy[iroot][oo_dim:]
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for a, b in pairs:
-                pprpa_print_a_pair(
+                e1, e2, p = pprpa_print_a_pair(
                     is_pp=True, p=a+nocc, q=b+nocc, percentage=full[a, b])
+                e1_lst.append(e1)
+                e2_lst.append(e2)
+                p_lst.append(p)
+                root_numers.append(n)
+                multiplicity.append(m)
+                excitation_energy.append(e)
+                two_e.append(t)
+
             print("")
     else:
         for iroot in range(nroot):
+            n = iroot + 1
+            m = multi
+            e = (exci[iroot] - exci0) * au2ev
+            t = exci[iroot] * au2ev
+
             print("#%-d %s de-excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV" %
-                  (iroot + 1, multi,
-                   (exci[iroot] - exci0) * au2ev, exci[iroot] * au2ev))
+                  (n, m, e, t))
+            
             full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
             full[tri_row_o, tri_col_o] = xy[iroot][:oo_dim]
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
+
             for i, j in pairs:
-                pprpa_print_a_pair(is_pp=False, p=i, q=j, percentage=full[i, j])
+                e1, e2, p = pprpa_print_a_pair(is_pp=False, p=i, q=j, percentage=full[i, j])
+                e1_lst.append(e1)
+                e2_lst.append(e2)
+                p_lst.append(p)
+                root_numers.append(n)
+                multiplicity.append(m)
+                excitation_energy.append(e)
+                two_e.append(t)
 
             if nvir > 0:
                 full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
@@ -574,11 +616,29 @@ def _pprpa_print_eigenvector(
                 full = numpy.power(full, 2)
                 pairs = numpy.argwhere(full > thresh)
                 for a, b in pairs:
-                    pprpa_print_a_pair(
+                    e1, e2, p = pprpa_print_a_pair(
                         is_pp=True, p=a+nocc, q=b+nocc, percentage=full[a, b])
+                    e1_lst.append(e1)
+                    e2_lst.append(e2)
+                    p_lst.append(p)
+                    root_numers.append(n)
+                    multiplicity.append(m)
+                    excitation_energy.append(e)
+                    two_e.append(t)
+
             print("")
 
-    return
+    result_df = pd.DataFrame({
+        "root_number": root_numers,
+        "multiplicity": multiplicity,
+        "dE": excitation_energy,
+        "two_e": two_e,
+        "e1": e1_lst,
+        "e2": e2_lst,
+        "percentage": p_lst
+    })
+
+    return result_df
 
 
 def pprpa_print_a_pair(is_pp, p, q, percentage):
@@ -590,13 +650,16 @@ def pprpa_print_a_pair(is_pp, p, q, percentage):
         q (int): MO index of the second orbital.
         percentage (double): the percentage of this pair.
     """
+    e1 = p + 1
+    e2 = q + 1
+    percentage *= 100
     if is_pp:
       print("    particle-particle pair: %5d %5d   %5.2f%%" %
-            (p + 1, q + 1, percentage * 100))
+            (e1, e2, percentage))
     else:
       print("    hole-hole pair:         %5d %5d   %5.2f%%" %
-            (p + 1, q + 1, percentage * 100))
-    return
+            (e1, e2, percentage))
+    return e1, e2, percentage
 
 
 def _analyze_pprpa_davidson(
@@ -609,24 +672,25 @@ def _analyze_pprpa_davidson(
             exci0 = min(exci_s[0], exci_t[0])
         else:
             exci0 = max(exci_s[0], exci_t[0])
-        _pprpa_print_eigenvector(
+        s_df = _pprpa_print_eigenvector(
             multi="s", nocc=nocc, nvir=nvir, thresh=print_thresh,
             channel=channel, exci0=exci0, exci=exci_s, xy=xy_s)
-        _pprpa_print_eigenvector(
+        t_df = _pprpa_print_eigenvector(
             multi="t", nocc=nocc, nvir=nvir, thresh=print_thresh,
             channel=channel, exci0=exci0, exci=exci_t, xy=xy_t)
     else:
+        s_df, t_df = None, None
         if exci_s is not None:
             print("only singlet results found.")
-            _pprpa_print_eigenvector(
+            s_df = _pprpa_print_eigenvector(
                 multi="s", nocc=nocc, nvir=nvir, thresh=print_thresh,
                 channel=channel, exci0=exci_s[0], exci=exci_s, xy=xy_s)
         else:
             print("only triplet results found.")
-            _pprpa_print_eigenvector(
+            t_df = _pprpa_print_eigenvector(
                 multi="t", nocc=nocc, nvir=nvir, thresh=print_thresh,
                 channel=channel, exci0=exci_t[0], exci=exci_t, xy=xy_t)
-    return
+    return s_df, t_df
 
 
 class ppRPA_Davidson():
@@ -772,8 +836,8 @@ class ppRPA_Davidson():
         return
 
     def analyze(self):
-        _analyze_pprpa_davidson(
+        s_df, t_df = _analyze_pprpa_davidson(
             exci_s=self.exci_s, xy_s=self.xy_s, exci_t=self.exci_t,
             xy_t=self.xy_t, nocc=self.nocc, nvir=self.nvir,
             print_thresh=self.print_thresh, channel=self.channel)
-        return
+        return s_df, t_df
