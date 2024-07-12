@@ -9,6 +9,7 @@ from lib_pprpa.pprpa_davidson import pprpa_orthonormalize_eigenvector, pprpa_pri
 from lib_pprpa.pprpa_util import get_chemical_potential, start_clock, stop_clock, print_citation, inner_product
 from lib_pprpa.pprpa_direct import diagonalize_pprpa_triplet
 
+
 def upprpa_orthonormalize_eigenvector(subspace, nocc, exci, xy):
     """Orthonormalize U-ppRPA eigenvectors.
     The eigenvector is normalized as Y^2 - X^2 = 1.
@@ -58,7 +59,7 @@ def upprpa_orthonormalize_eigenvector(subspace, nocc, exci, xy):
 
         # change |X -Y> to |X Y>
         xy[:][:oo_dim] *= -1
-    
+
     else:
         pprpa_orthonormalize_eigenvector('t', nocc, exci, xy)
 
@@ -87,10 +88,10 @@ def diagonalize_pprpa_subspace_diff_spin(nocc, mo_energy, Lpq, mu=None):
         nocc(tuple of int): number of occupied orbitals, (nalpha, nbeta).
         mo_energy (list of double array): orbital energies.
         Lpq (list of double ndarray): three-center RI matrices in MO space.
-    
+
     Kwarg:
         mu (double): chemical potential.
-    
+
     Returns:
         exci (double array): ppRPA eigenvalue.
         xy (double ndarray): ppRPA eigenvector.
@@ -101,10 +102,10 @@ def diagonalize_pprpa_subspace_diff_spin(nocc, mo_energy, Lpq, mu=None):
     if mu is None:
         mu = get_chemical_potential(nocc, mo_energy)
 
-    #===========================> A matrix <============================
+    # ===========================> A matrix <============================
     # <ab|cd>
     A = numpy.einsum(
-        'Pac,Pbd->abcd', Lpq[0][:, nocc[0]:, nocc[0]:], 
+        'Pac,Pbd->abcd', Lpq[0][:, nocc[0]:, nocc[0]:],
         Lpq[1][:, nocc[1]:, nocc[1]:], optimize=True)
     # delta_ac delta_bd (e_a + e_b - 2 * mu)
     A = A.reshape(nvir[0]*nvir[1], nvir[0]*nvir[1])
@@ -115,17 +116,17 @@ def diagonalize_pprpa_subspace_diff_spin(nocc, mo_energy, Lpq, mu=None):
     numpy.fill_diagonal(A, A.diagonal() + orb_sum)
     trace_A = numpy.trace(A)
 
-    #===========================> B matrix <============================
+    # ===========================> B matrix <============================
     # <ab|ij>
     B = numpy.einsum(
-        'Pai,Pbj->abij', Lpq[0][:, nocc[0]:, :nocc[0]], 
+        'Pai,Pbj->abij', Lpq[0][:, nocc[0]:, :nocc[0]],
         Lpq[1][:, nocc[1]:, :nocc[1]], optimize=True)
     B = B.reshape(nvir[0]*nvir[1], nocc[0]*nocc[1])
 
-    #===========================> C matrix <============================
+    # ===========================> C matrix <============================
     # <ij|kl>
     C = numpy.einsum(
-        'Pik,Pjl->ijkl', Lpq[0][:, :nocc[0], :nocc[0]], 
+        'Pik,Pjl->ijkl', Lpq[0][:, :nocc[0], :nocc[0]],
         Lpq[1][:, :nocc[1], :nocc[1]], optimize=True)
     # - delta_ik delta_jl (e_i + e_j - 2 * mu)
     C = C.reshape(nocc[0]*nocc[1], nocc[0]*nocc[1])
@@ -135,7 +136,7 @@ def diagonalize_pprpa_subspace_diff_spin(nocc, mo_energy, Lpq, mu=None):
     orb_sum -= 2.0 * mu
     numpy.fill_diagonal(C, C.diagonal() - orb_sum)
 
-    #==================> whole matrix in the subspace<==================
+    # ==================> whole matrix in the subspace<==================
     # C    B^T
     # B     A
     M_upper = numpy.concatenate((C, B.T), axis=1)
@@ -145,7 +146,7 @@ def diagonalize_pprpa_subspace_diff_spin(nocc, mo_energy, Lpq, mu=None):
     # M to WM, where W is the metric matrix [[-I, 0], [0, I]]
     M[:nocc[0]*nocc[1]][:] *= -1.0
 
-    #=====================> solve for eigenpairs <======================
+    # =====================> solve for eigenpairs <======================
     exci, xy = scipy.linalg.eig(M)
     exci = exci.real
     xy = xy.T  # Fortran to Python order
@@ -196,7 +197,7 @@ def _pprpa_print_eigenvector(subspace, nocc, nvir, nocc_fro, thresh, hh_state,
     if subspace == 'aaaa' or subspace == 'bbbb':
         tri_row_o, tri_col_o = numpy.tril_indices(nocc, -1)
         tri_row_v, tri_col_v = numpy.tril_indices(nvir, -1)
-        
+
     au2ev = 27.211386
     e1s = []
     e2s = []
@@ -207,7 +208,7 @@ def _pprpa_print_eigenvector(subspace, nocc, nvir, nocc_fro, thresh, hh_state,
     exi_idxs = []
     channel = []
 
-    #=====================> two-electron removal <======================
+    # =====================> two-electron removal <======================
     for istate in range(min(hh_state, oo_dim)):
         exi_idx = istate + 1
         dE = (exci[oo_dim-istate-1] - exci0) * au2ev
@@ -237,7 +238,7 @@ def _pprpa_print_eigenvector(subspace, nocc, nvir, nocc_fro, thresh, hh_state,
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for a, b in pairs:
-                e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, 
+                e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc,
                                    q=b+nocc_fro+nocc, percentage=full[a, b])
                 e1s.append(e1)            
                 e2s.append(e2)
@@ -268,7 +269,7 @@ def _pprpa_print_eigenvector(subspace, nocc, nvir, nocc_fro, thresh, hh_state,
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for a, b in pairs:
-                e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro[0]+nocc[0], 
+                e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro[0]+nocc[0],
                                    q=b+nocc_fro[1]+nocc[1], percentage=full[a, b])
                 e1s.append(e1)            
                 e2s.append(e2)
@@ -280,7 +281,7 @@ def _pprpa_print_eigenvector(subspace, nocc, nvir, nocc_fro, thresh, hh_state,
                 channel.append("pp")
         print("")
 
-    #=====================> two-electron addition <=====================
+    # =====================> two-electron addition <=====================
     for istate in range(min(pp_state, vv_dim)):
         exi_idx = istate + 1
         dE = (exci[oo_dim+istate] - exci0) * au2ev
@@ -309,7 +310,7 @@ def _pprpa_print_eigenvector(subspace, nocc, nvir, nocc_fro, thresh, hh_state,
             full = numpy.power(full, 2)
             pairs = numpy.argwhere(full > thresh)
             for a, b in pairs:
-                e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, 
+                e1, e2, p = pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc,
                                    q=b+nocc_fro+nocc, percentage=full[a, b])
                 e1s.append(e1)
                 e2s.append(e2)
@@ -341,7 +342,7 @@ def _pprpa_print_eigenvector(subspace, nocc, nvir, nocc_fro, thresh, hh_state,
             pairs = numpy.argwhere(full > thresh)
             for a, b in pairs:
                 e1, e2, p = pprpa_print_a_pair(
-                    is_pp=True, p=a+nocc_fro[0]+nocc[0], 
+                    is_pp=True, p=a+nocc_fro[0]+nocc[0],
                     q=b+nocc_fro[1]+nocc[1], percentage=full[a, b])
                 e1s.append(e1)
                 e2s.append(e2)
@@ -389,7 +390,7 @@ def _analyze_pprpa_direct(
             exci0_list.append(exci_ab[oo_dim_ab])
         else:
             exci0_list.append(exci_ab[oo_dim_ab])
-        
+
     if nelec == 'n-2':
         exci0 = min(exci0_list)
     else:
@@ -397,24 +398,23 @@ def _analyze_pprpa_direct(
 
     if exci_aa is not None:
         aaaa_df = _pprpa_print_eigenvector(
-            'aaaa', nocc[0], nvir[0], nocc_fro[0], print_thresh, hh_state, 
+            'aaaa', nocc[0], nvir[0], nocc_fro[0], print_thresh, hh_state,
             pp_state, exci0, exci_aa, xy[0])
     if exci_bb is not None:
         bbbb_df = _pprpa_print_eigenvector(
-            'bbbb', nocc[1], nvir[1], nocc_fro[1], print_thresh, hh_state, 
+            'bbbb', nocc[1], nvir[1], nocc_fro[1], print_thresh, hh_state,
             pp_state, exci0, exci_bb, xy[1])
     if exci_ab is not None:
         abab_df = _pprpa_print_eigenvector(
-            'abab', nocc, nvir, nocc_fro, print_thresh, hh_state, 
+            'abab', nocc, nvir, nocc_fro, print_thresh, hh_state,
             pp_state, exci0, exci_ab, xy[2])
 
     return aaaa_df, bbbb_df, abab_df
-    #pass
 
 
 class UppRPA_direct():
     """Direct solver class for unrestricted ppRPA.
-    
+
     Args:
         nocc (tuple): number of occupied orbitals, (nalpha, nbeta)
         mo_energy (list of double arrays): orbital energies, [alpha, beta]
@@ -433,6 +433,7 @@ class UppRPA_direct():
         return corex_energy for ppRPA and 'n+2' for hhRPA
         print_thresh (float): threshold for printing component
     """
+
     def __init__(
             self, nocc, mo_energy, Lpq, hh_state=5, pp_state=5, nelec='n-2',
             print_thresh=0.1):
@@ -443,7 +444,7 @@ class UppRPA_direct():
         self.pp_state = pp_state
         self.print_thresh = print_thresh
 
-        #======================> internal flags <=======================
+        # ======================> internal flags <=======================
         # number of orbitals
         self.nmo = (len(self.mo_energy[0]), len(self.mo_energy[1]))
         # number of virtual orbitals
@@ -455,7 +456,7 @@ class UppRPA_direct():
         # 'n-2' for ppRPA, 'n+2' for hhRPA
         self.nelec = nelec
 
-        #=========================> results <===========================
+        # =========================> results <===========================
         self.ec = None  # correlation energy [aaaa, bbbb, abab]
         self.exci = None  # two-electron addition energy [aaaa, bbbb, abab]
         self.xy = None  # ppRPA eigenvector [aaaa, bbbb, abab]
@@ -463,7 +464,7 @@ class UppRPA_direct():
         print_citation()
 
         return
-    
+
     def check_parameter(self):
         assert 0.0 < self.print_thresh < 1.0
         assert self.nelec in ["n-2", "n+2"]
@@ -473,7 +474,7 @@ class UppRPA_direct():
         return
 
     def dump_flags(self):
-        #====================> calculate dimensions <===================
+        # ====================> calculate dimensions <===================
         # (alpha, alpha) subspace
         aavv_dim = int(self.nvir[0] * (self.nvir[0] + 1) / 2)
         aaoo_dim = int(self.nocc[0] * (self.nocc[0] + 1) / 2)
@@ -486,9 +487,9 @@ class UppRPA_direct():
 
         print('\n******** %s ********' % self.__class__)
         print('naux = %d' % self.naux)
-        print('nmo = %d (%d alpha, %d beta)' 
+        print('nmo = %d (%d alpha, %d beta)'
               % (self.nmo[0]+self.nmo[1], self.nmo[0], self.nmo[1]))
-        print('nocc = %d (%d alpha, %d beta), nvir = %d (%d alpha, %d beta)' 
+        print('nocc = %d (%d alpha, %d beta), nvir = %d (%d alpha, %d beta)'
               % (
                   self.nocc[0] + self.nocc[1], self.nocc[0], self.nocc[1],
                   self.nvir[0] + self.nvir[1], self.nvir[0], self.nvir[1]))
@@ -509,7 +510,7 @@ class UppRPA_direct():
         return
 
     def check_memory(self):
-        #====================> calculate dimensions <===================
+        # ====================> calculate dimensions <===================
         # (alpha, alpha) subspace
         aavv_dim = int(self.nvir[0] * (self.nvir[0] + 1) / 2)
         aaoo_dim = int(self.nocc[0] * (self.nocc[0] + 1) / 2)
@@ -532,29 +533,38 @@ class UppRPA_direct():
             print("U-ppRPA needs at least %.1f GB memory." % (mem / 1.0e3))
         return
 
-    def kernel(self):
+    def kernel(self, subspace=['aa', 'bb', 'ab']):
         self.check_parameter()
         self.dump_flags()
         self.check_memory()
 
-        start_clock("U-ppRPA direct: (alpha alpha, alpha alpha)")
-        aa_exci, aa_xy, aa_ec = diagonalize_pprpa_subspace_same_spin(
-            self.nocc[0], self.mo_energy[0], self.Lpq[0], mu=self.mu
-        )
-        stop_clock("U-ppRPA direct: (alpha alpha, alpha alpha)")
+        if 'aa' in subspace:
+            start_clock("U-ppRPA direct: (alpha alpha, alpha alpha)")
+            aa_exci, aa_xy, aa_ec = diagonalize_pprpa_subspace_same_spin(
+                self.nocc[0], self.mo_energy[0], self.Lpq[0], mu=self.mu
+            )
+            stop_clock("U-ppRPA direct: (alpha alpha, alpha alpha)")
+        else:
+            aa_exci = aa_xy = aa_ec = None
 
-        start_clock("U-ppRPA direct: (beta beta, beta beta)")
-        bb_exci, bb_xy, bb_ec = diagonalize_pprpa_subspace_same_spin(
-            self.nocc[1], self.mo_energy[1], self.Lpq[1], mu=self.mu
-        )
-        stop_clock("U-ppRPA direct: (beta beta, beta beta)")
+        if 'bb' in subspace:
+            start_clock("U-ppRPA direct: (beta beta, beta beta)")
+            bb_exci, bb_xy, bb_ec = diagonalize_pprpa_subspace_same_spin(
+                self.nocc[1], self.mo_energy[1], self.Lpq[1], mu=self.mu
+            )
+            stop_clock("U-ppRPA direct: (beta beta, beta beta)")
+        else:
+            bb_exci = bb_xy = bb_ec = None
 
-        start_clock("U-ppRPA direct: (alpha beta, alpha beta)")
-        ab_exci, ab_xy, ab_ec = diagonalize_pprpa_subspace_diff_spin(
-            self.nocc, self.mo_energy, self.Lpq, mu=self.mu
-        )
-        stop_clock("U-ppRPA direct: (alpha beta, alpha beta)")
-        
+        if 'ab' in subspace:
+            start_clock("U-ppRPA direct: (alpha beta, alpha beta)")
+            ab_exci, ab_xy, ab_ec = diagonalize_pprpa_subspace_diff_spin(
+                self.nocc, self.mo_energy, self.Lpq, mu=self.mu
+            )
+            stop_clock("U-ppRPA direct: (alpha beta, alpha beta)")
+        else:
+            ab_exci = ab_xy = ab_ec = None
+
         self.ec = [aa_ec, bb_ec, ab_ec]
         self.exci = [aa_exci, bb_exci, ab_exci]
         self.xy = [aa_xy, bb_xy, ab_xy]
