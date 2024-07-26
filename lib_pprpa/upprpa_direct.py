@@ -396,20 +396,24 @@ def _analyze_pprpa_direct(
     else:
         exci0 = max(exci0_list)
 
+    dfs = []
     if exci_aa is not None:
         aaaa_df = _pprpa_print_eigenvector(
             'aaaa', nocc[0], nvir[0], nocc_fro[0], print_thresh, hh_state,
             pp_state, exci0, exci_aa, xy[0])
+        dfs.append(aaaa_df)
     if exci_bb is not None:
         bbbb_df = _pprpa_print_eigenvector(
             'bbbb', nocc[1], nvir[1], nocc_fro[1], print_thresh, hh_state,
             pp_state, exci0, exci_bb, xy[1])
+        dfs.append(bbbb_df)
     if exci_ab is not None:
         abab_df = _pprpa_print_eigenvector(
             'abab', nocc, nvir, nocc_fro, print_thresh, hh_state,
             pp_state, exci0, exci_ab, xy[2])
+        dfs.append(abab_df)
 
-    return aaaa_df, bbbb_df, abab_df
+    return dfs
 
 
 class UppRPA_direct():
@@ -610,8 +614,8 @@ class UppRPA_direct():
         return
 
     def analyze(self, nocc_fro=(0, 0)):
-        aaaa_df, bbbb_df, abab_df = _analyze_pprpa_direct(
+        dfs = _analyze_pprpa_direct(
             self.exci, self.xy, self.nocc, self.nvir, nelec=self.nelec,
             print_thresh=self.print_thresh, hh_state=self.hh_state,
             pp_state=self.pp_state, nocc_fro=nocc_fro)
-        return aaaa_df, bbbb_df, abab_df
+        return dfs
