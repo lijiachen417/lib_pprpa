@@ -50,18 +50,20 @@ with mol.with_common_orig(_charge_center(mol)):
 mo_dip = mo.T @ ao_dip @ mo
 
 pp_RPA_functions = [
-    # ppRPA_Davidson,
+    ppRPA_Davidson,
     ppRPA_direct,
 ]
 
 for ppRPA in pp_RPA_functions:
     print(f"Testing {ppRPA.__name__}...")
-    # try:
-    pprpa = ppRPA(nocc, mf.mo_energy, Lpq, mo_dip=mo_dip, osc_channel="pp", hh_state=0)
-    pprpa.kernel("ab")
-    pprpa.analyze_ab()
-    # except:
-    # pprpa = ppRPA(nocc, mf.mo_energy, Lpq)
+    try:
+        pprpa = ppRPA(
+            nocc, mf.mo_energy, Lpq, mo_dip=mo_dip, osc_channel="pp", hh_state=0
+        )
+        # pprpa.kernel("ab")
+        # pprpa.analyze_ab()
+    except:
+        pprpa = ppRPA(nocc, mf.mo_energy, Lpq, mo_dip=mo_dip)
     pprpa.kernel("s")
     pprpa.kernel("t")
     pprpa.analyze()
