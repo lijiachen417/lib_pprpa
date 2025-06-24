@@ -56,10 +56,9 @@ pp_RPA_functions = [
 
 for ppRPA in pp_RPA_functions:
     print(f"Testing {ppRPA.__name__}...")
-    # try:
-    pprpa = ppRPA(nocc, mf.mo_energy, Lpq, mo_dip=mo_dip, osc_channel="pp", hh_state=0)
-    # except:
-    # pprpa = ppRPA(nocc, mf.mo_energy, Lpq)
+    pprpa = ppRPA(nocc, mf.mo_energy, Lpq, mo_dip=mo_dip, channel="pp")
+    pprpa.kernel("ab")
+    pprpa.analyze_ab()
     pprpa.kernel("s")
     pprpa.kernel("t")
     pprpa.analyze()

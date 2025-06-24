@@ -386,8 +386,8 @@ def pprpa_orthonormalize_eigenvector(multi, nocc, exci, xy):
 
 
 # analysis functions
-def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
-                             pp_state, exci0, exci, xy, mo_dip=None, osc_channel='pp'):
+def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, nroot,
+                             exci0, exci, xy, mo_dip=None, channel="pp"):
     """Print dominant components of an eigenvector.
 
     Args:
@@ -396,11 +396,12 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
         nvir (int): number of virtual orbitals.
         nocc_fro (int): number of frozen occupied orbitals.
         thresh (double): threshold to print a pair.
-        hh_state (int): number of interested hole-hole states.
-        pp_state (int): number of interested particle-particle states.
+        nroot (int): number of interested states.
         exci0 (double): lowest eigenvalue.
         exci (double array): ppRPA eigenvalue.
         xy (double ndarray): ppRPA eigenvector.
+        mo_dip (double ndarray): MO dipole integrals, <p|r|q>, (3, nmo, nmo).
+        channel (str): channel of the excitation, 'hh' or 'pp'.
     """
     if multi == "s":
         oo_dim = int((nocc + 1) * nocc / 2)
@@ -418,68 +419,69 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
 
     au2ev = 27.211386
 
-    for istate in range(min(hh_state, oo_dim)):
-        print("#%-d %s de-excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
-              (istate + 1, multi, (exci[oo_dim-istate-1] - exci0) * au2ev,
-               exci[oo_dim-istate-1] * au2ev))
-        if mo_dip is not None:
-            f = get_pprpa_oscillator_strength(
-                nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
-                exci=exci[oo_dim-istate-1], exci0=exci0,
-                xy=xy[oo_dim-istate-1], xy0=xy[oo_dim-istate-1], multi=multi)
-            print("#    oscillator strength = %-12.6f  a.u." % f)
-        full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
-        full[tri_row_o, tri_col_o] = xy[oo_dim-istate-1][:oo_dim]
-        full = numpy.power(full, 2)
-        pairs = numpy.argwhere(full > thresh)
-        for i, j in pairs:
-            pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
-                               percentage=full[i, j])
+    if channel =="hh":
+        for istate in range(min(nroot, oo_dim)):
+            print("#%-d %s de-excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
+                (istate + 1, multi, (exci[oo_dim-istate-1] - exci0) * au2ev,
+                exci[oo_dim-istate-1] * au2ev))
+            if mo_dip is not None:
+                f = get_pprpa_oscillator_strength(
+                    nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=channel,
+                    exci=exci[oo_dim-istate-1], exci0=exci0,
+                    xy=xy[oo_dim-istate-1], xy0=xy[oo_dim-istate-1], multi=multi)
+                print("#    oscillator strength = %-12.6f  a.u." % f)
+            full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
+            full[tri_row_o, tri_col_o] = xy[oo_dim-istate-1][:oo_dim]
+            full = numpy.power(full, 2)
+            pairs = numpy.argwhere(full > thresh)
+            for i, j in pairs:
+                pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
+                                percentage=full[i, j])
 
-        full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
-        full[tri_row_v, tri_col_v] = xy[oo_dim-istate-1][oo_dim:]
-        full = numpy.power(full, 2)
-        pairs = numpy.argwhere(full > thresh)
-        for a, b in pairs:
-            pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
-                               percentage=full[a, b])
+            full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
+            full[tri_row_v, tri_col_v] = xy[oo_dim-istate-1][oo_dim:]
+            full = numpy.power(full, 2)
+            pairs = numpy.argwhere(full > thresh)
+            for a, b in pairs:
+                pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
+                                percentage=full[a, b])
 
-        print("")
+            print("")
+    else:
+        for istate in range(min(nroot, vv_dim)):
+            print("#%-d %s excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
+                (istate + 1, multi, (exci[oo_dim+istate] - exci0) * au2ev,
+                exci[oo_dim+istate] * au2ev))
+            if mo_dip is not None:
+                f = get_pprpa_oscillator_strength(
+                    nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=channel,
+                    exci=exci[oo_dim+istate], exci0=exci0,
+                    xy=xy[oo_dim+istate], xy0=xy[oo_dim+istate], multi=multi)
+                print("#    oscillator strength = %-12.6f  a.u." % f)
+            full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
+            full[tri_row_o, tri_col_o] = xy[oo_dim+istate][:oo_dim]
+            full = numpy.power(full, 2)
+            pairs = numpy.argwhere(full > thresh)
+            for i, j in pairs:
+                pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
+                                percentage=full[i, j])
 
-    for istate in range(min(pp_state, vv_dim)):
-        print("#%-d %s excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
-              (istate + 1, multi, (exci[oo_dim+istate] - exci0) * au2ev,
-               exci[oo_dim+istate] * au2ev))
-        if mo_dip is not None:
-            f = get_pprpa_oscillator_strength(
-                nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
-                exci=exci[oo_dim+istate], exci0=exci0,
-                xy=xy[oo_dim+istate], xy0=xy[oo_dim+istate], multi=multi)
-            print("#    oscillator strength = %-12.6f  a.u." % f)
-        full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
-        full[tri_row_o, tri_col_o] = xy[oo_dim+istate][:oo_dim]
-        full = numpy.power(full, 2)
-        pairs = numpy.argwhere(full > thresh)
-        for i, j in pairs:
-            pprpa_print_a_pair(is_pp=False, p=i+nocc_fro, q=j+nocc_fro,
-                               percentage=full[i, j])
+            full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
+            full[tri_row_v, tri_col_v] = xy[oo_dim+istate][oo_dim:]
+            full = numpy.power(full, 2)
+            pairs = numpy.argwhere(full > thresh)
+            for a, b in pairs:
+                pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
+                                percentage=full[a, b])
 
-        full = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
-        full[tri_row_v, tri_col_v] = xy[oo_dim+istate][oo_dim:]
-        full = numpy.power(full, 2)
-        pairs = numpy.argwhere(full > thresh)
-        for a, b in pairs:
-            pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
-                               percentage=full[a, b])
-
-        print("")
+            print("")
 
     return
 
 
 def _analyze_pprpa_direct(
         exci_s, xy_s, exci_t, xy_t, nocc, nvir, nelec="n-2", print_thresh=0.1,
-        hh_state=5, pp_state=5, nocc_fro=0, mo_dip=None, osc_channel='pp'):
+        nroot=5, nocc_fro=0, mo_dip=None, channel='pp'):
     print("\nanalyze ppRPA results.")
     oo_dim_s = int((nocc + 1) * nocc / 2)
     oo_dim_t = int((nocc - 1) * nocc / 2)
@@ -492,34 +494,34 @@ def _analyze_pprpa_direct(
         _pprpa_print_eigenvector(
             multi="s", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
             thresh=print_thresh,
-            hh_state=hh_state, pp_state=pp_state, exci0=exci0,
-            exci=exci_s, xy=xy_s, mo_dip=mo_dip, osc_channel=osc_channel)
+            nroot=nroot, exci0=exci0,
+            exci=exci_s, xy=xy_s, mo_dip=mo_dip, channel=channel)
         _pprpa_print_eigenvector(
             multi="t", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
             thresh=print_thresh,
-            hh_state=hh_state, pp_state=pp_state, exci0=exci0,
-            exci=exci_t, xy=xy_t, mo_dip=mo_dip, osc_channel=osc_channel)
+            nroot=nroot, exci0=exci0,
+            exci=exci_t, xy=xy_t, mo_dip=mo_dip, channel=channel)
     else:
         if exci_s is not None:
             print("only singlet results found.")
             exci0 = exci_s[oo_dim_s] if nelec == "n-2" else exci_s[oo_dim_s-1]
             _pprpa_print_eigenvector(
                 multi="s", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
-                thresh=print_thresh, hh_state=hh_state,
-                pp_state=pp_state, exci0=exci0, exci=exci_s, xy=xy_s, mo_dip=mo_dip, osc_channel=osc_channel)
+                thresh=print_thresh, nroot=nroot,
+                exci0=exci0, exci=exci_s, xy=xy_s, mo_dip=mo_dip, channel=channel)
         else:
             print("only triplet results found.")
             exci0 = exci_s[oo_dim_t] if nelec == "n-2" else exci_s[oo_dim_t-1]
             _pprpa_print_eigenvector(
                 multi="t", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
-                thresh=print_thresh, hh_state=hh_state,
-                pp_state=pp_state, exci0=exci0, exci=exci_t, xy=xy_t, mo_dip=mo_dip, osc_channel=osc_channel)
+                thresh=print_thresh, nroot=nroot,
+                exci0=exci0, exci=exci_t, xy=xy_t, mo_dip=mo_dip, channel=channel)
     return
 
 
 def _analyze_pprpa_direct_ab(
-        exci, xy, nocc, nvir, nelec="n-2", print_thresh=0.1, hh_state=5,
-        pp_state=5, nocc_fro=0, mo_dip=None, osc_channel='pp'):
+        exci, xy, nocc, nvir, nelec="n-2", print_thresh=0.1, nroot=5,
+        nocc_fro=0, mo_dip=None, channel='pp'):
     oo_dim = int(nocc * nocc)
     vv_dim = int(nvir * nvir)
     exci0 = exci[oo_dim] if nelec == "n-2" else exci[oo_dim-1]
@@ -527,77 +529,77 @@ def _analyze_pprpa_direct_ab(
 
     au2ev = 27.211386
     print("\n     print ppRPA excitations: alpha-beta block\n")
-    for istate in range(min(hh_state, oo_dim)):
-        print("#%-d ab de-excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
-              (istate + 1, (exci[oo_dim-istate-1] - exci0) * au2ev,
-               exci[oo_dim-istate-1] * au2ev))
-        if mo_dip is not None:
-            f = get_pprpa_oscillator_strength(
-                nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
-                exci=exci[oo_dim-istate-1], exci0=exci0, xy=xy[oo_dim-istate-1],
-                xy0=xy0)
-            print("#    oscillator strength = %-12.6f  a.u." % f)
-        full = xy[oo_dim-istate-1][:oo_dim].reshape(nocc, nocc)
-        full = numpy.power(full, 2)
-        pairs = numpy.argwhere(full > print_thresh)
-        for i, j in pairs:
-            pprpa_print_a_pair(
-                is_pp=False, p=i+nocc_fro, q=j+nocc_fro, percentage=full[i, j])
+    if channel == "hh":
+        for istate in range(min(nroot, oo_dim)):
+            print("#%-d ab de-excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
+                (istate + 1, (exci[oo_dim-istate-1] - exci0) * au2ev,
+                exci[oo_dim-istate-1] * au2ev))
+            if mo_dip is not None:
+                f = get_pprpa_oscillator_strength(
+                    nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=channel,
+                    exci=exci[oo_dim-istate-1], exci0=exci0, xy=xy[oo_dim-istate-1],
+                    xy0=xy0)
+                print("#    oscillator strength = %-12.6f  a.u." % f)
+            full = xy[oo_dim-istate-1][:oo_dim].reshape(nocc, nocc)
+            full = numpy.power(full, 2)
+            pairs = numpy.argwhere(full > print_thresh)
+            for i, j in pairs:
+                pprpa_print_a_pair(
+                    is_pp=False, p=i+nocc_fro, q=j+nocc_fro, percentage=full[i, j])
 
-        full = xy[oo_dim-istate-1][oo_dim:].reshape(nvir, nvir)
-        full = numpy.power(full, 2)
-        pairs = numpy.argwhere(full > print_thresh)
-        for a, b in pairs:
-            pprpa_print_a_pair(
-                is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
-                percentage=full[a, b])
+            full = xy[oo_dim-istate-1][oo_dim:].reshape(nvir, nvir)
+            full = numpy.power(full, 2)
+            pairs = numpy.argwhere(full > print_thresh)
+            for a, b in pairs:
+                pprpa_print_a_pair(
+                    is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
+                    percentage=full[a, b])
 
-        print("")
+            print("")
+    else:
+        for istate in range(min(nroot, vv_dim)):
+            print("#%-d ab excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
+                (istate + 1, (exci[oo_dim+istate] - exci0) * au2ev,
+                exci[oo_dim+istate] * au2ev))
+            if mo_dip is not None:
+                f = get_pprpa_oscillator_strength(
+                    nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=channel,
+                    exci=exci[oo_dim+istate], exci0=exci0, xy=xy[oo_dim+istate],
+                    xy0=xy0)
+                print("#    oscillator strength = %-12.6f  a.u." % f)
+            full = xy[oo_dim+istate][:oo_dim].reshape(nocc, nocc)
+            full = numpy.power(full, 2)
+            pairs = numpy.argwhere(full > print_thresh)
+            for i, j in pairs:
+                pprpa_print_a_pair(
+                    is_pp=False, p=i+nocc_fro, q=j+nocc_fro, percentage=full[i, j])
 
-    for istate in range(min(pp_state, vv_dim)):
-        print("#%-d ab excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
-              (istate + 1, (exci[oo_dim+istate] - exci0) * au2ev,
-               exci[oo_dim+istate] * au2ev))
-        if mo_dip is not None:
-            f = get_pprpa_oscillator_strength(
-                nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
-                exci=exci[oo_dim+istate], exci0=exci0, xy=xy[oo_dim+istate],
-                xy0=xy0)
-            print("#    oscillator strength = %-12.6f  a.u." % f)
-        full = xy[oo_dim+istate][:oo_dim].reshape(nocc, nocc)
-        full = numpy.power(full, 2)
-        pairs = numpy.argwhere(full > print_thresh)
-        for i, j in pairs:
-            pprpa_print_a_pair(
-                is_pp=False, p=i+nocc_fro, q=j+nocc_fro, percentage=full[i, j])
+            full = xy[oo_dim+istate][oo_dim:].reshape(nvir, nvir)
+            full = numpy.power(full, 2)
+            pairs = numpy.argwhere(full > print_thresh)
+            for a, b in pairs:
+                pprpa_print_a_pair(
+                    is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
+                    percentage=full[a, b])
 
-        full = xy[oo_dim+istate][oo_dim:].reshape(nvir, nvir)
-        full = numpy.power(full, 2)
-        pairs = numpy.argwhere(full > print_thresh)
-        for a, b in pairs:
-            pprpa_print_a_pair(
-                is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
-                percentage=full[a, b])
-
-        print("")
+            print("")
     return
 
 
 class ppRPA_direct():
     def __init__(
-            self, nocc, mo_energy, Lpq, hh_state=5, pp_state=5, nelec="n-2",
-            print_thresh=0.1, mo_dip=None, osc_channel="pp"):
+            self, nocc, mo_energy, Lpq, nroot=5, channel="pp", nelec="n-2",
+            print_thresh=0.1, mo_dip=None):
         # necessary input
         self.nocc = nocc  # number of occupied orbitals
         self.mo_energy = numpy.asarray(mo_energy)  # orbital energy
         self.Lpq = numpy.asarray(Lpq)  # three-center RI matrix in MO space
 
         # options
-        self.hh_state = hh_state  # number of hole-hole states to print
-        self.pp_state = pp_state  # number of particle-particle states to print
+        self.nroot = nroot  # number of states to calculate
+        self.channel = channel  # channel of desired states, "pp" or "hh"
         self.nelec = nelec  # "n-2" or "n+2" for system is an N-2 or N+2 system
         self.print_thresh = print_thresh  # threshold to print component
-        self.osc_channel = osc_channel  # channel to compute oscillator strength
         self.mo_dip = mo_dip  # vector dipole integrals in MO space
 
         # internal flags
@@ -625,8 +627,8 @@ class ppRPA_direct():
         return
 
     def check_parameter(self):
-        assert self.pp_state >= 0
-        assert self.hh_state >= 0
+        assert self.nroot >= 0
+        assert self.channel in ["pp", "hh"]
         assert self.nelec in ["n-2", "n+2"]
         assert 0.0 < self.print_thresh < 1.0
         assert self.multi in ["s", "t", "ab"]
@@ -651,17 +653,16 @@ class ppRPA_direct():
         full_dim = oo_dim + vv_dim
         print('multiplicity = %s' %
               ("singlet" if self.multi == "s" else "triplet"))
+        print('channel = %s' % self.channel)
         print('naux = %d' % self.naux)
         print('nmo = %d' % self.nmo)
         print('nocc = %d nvir = %d' % (self.nocc, self.nvir))
         print('occ-occ dimension = %d vir-vir dimension = %d' %
               (oo_dim, vv_dim))
         print('full dimension = %d' % full_dim)
-        print('interested hh state = %d' % self.hh_state)
-        print('interested pp state = %d' % self.pp_state)
+        print('number of roots = %d' % self.nroot)
         print('ground state = %s' % self.nelec)
         print('print threshold = %.2f%%' % (self.print_thresh*100))
-        print("oscillator strength channel = %s" % self.osc_channel)
         print('')
         return
 
@@ -742,17 +743,16 @@ class ppRPA_direct():
         _analyze_pprpa_direct(
             exci_s=self.exci_s, xy_s=self.xy_s, exci_t=self.exci_t,
             xy_t=self.xy_t, nocc=self.nocc, nvir=self.nvir, nelec=self.nelec,
-            print_thresh=self.print_thresh, hh_state=self.hh_state,
-            pp_state=self.pp_state, nocc_fro=nocc_fro, mo_dip=self.mo_dip,
-            osc_channel=self.osc_channel)
+            print_thresh=self.print_thresh, nroot=self.nroot,
+            nocc_fro=nocc_fro, mo_dip=self.mo_dip, channel=self.channel)
         return
 
     def analyze_ab(self, nocc_fro=0):
         _analyze_pprpa_direct_ab(
             exci=self.exci_ab, xy=self.xy_ab, nocc=self.nocc, nvir=self.nvir,
             nelec=self.nelec, print_thresh=self.print_thresh,
-            hh_state=self.hh_state, pp_state=self.pp_state, nocc_fro=nocc_fro,
-            mo_dip=self.mo_dip, osc_channel=self.osc_channel)
+            nroot=self.nroot, nocc_fro=nocc_fro,
+            mo_dip=self.mo_dip, channel=self.channel)
         return
 
     def get_correlation(self):
