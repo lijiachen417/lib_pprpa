@@ -238,7 +238,7 @@ def get_pprpa_dm(multi, state, xy, nocc, nvir, mo_coeff, nocc_full,
 
 # oscillator strength
 def get_pprpa_oscillator_strength(
-        nocc, nvir, mo_dip, channel, exci, exci0, xy, xy0):
+        nocc, nvir, mo_dip, channel, exci, exci0, xy, xy0, multi='ab'):
     """Compute oscillator strength from restricted pp-TDA or hh-TDA.
     For restricted case, ground state and all singlets are closed-shell.
     Thus, only alpha-beta-alpha-beta block is needed.
@@ -262,11 +262,22 @@ def get_pprpa_oscillator_strength(
     Return:
         f (double): oscillator strength.
     """
-    oo_dim = nocc * nocc
+    from lib_pprpa.grad.grad_utils import get_xy_full
+    
     if channel == 'pp':
-        full = xy[oo_dim:].reshape(nvir, nvir)
-        full0 = xy0[oo_dim:].reshape(nvir, nvir)
-
+        if multi == 'ab':
+            vv_shape = (nvir, nvir)
+            full = xy[oo_dim:].reshape(vv_shape)
+            full0 = xy0[oo_dim:].reshape(vv_shape)
+        else:
+            if multi == 's':
+                oo_shape = (nocc + 1, nocc // 2)
+            elif multi == 't':
+                oo_shape = (nocc - 1, nocc // 2)
+            oo_dim = numpy.prod(oo_shape)
+            _, full = get_xy_full(xy, oo_dim, mult=multi)
+            _, full0 = get_xy_full(xy0, oo_dim, mult=multi)
+        
         # calculate transition dipole <Psi_0|r|Psi_m>
         trans_dip = numpy.zeros(shape=[3], dtype=numpy.double)
         trans_dip += numpy.einsum(
