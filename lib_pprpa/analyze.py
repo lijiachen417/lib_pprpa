@@ -267,8 +267,8 @@ def get_pprpa_oscillator_strength(
     if channel == 'pp':
         if multi == 'ab':
             vv_shape = (nvir, nvir)
-            full = xy[oo_dim:].reshape(vv_shape)
-            full0 = xy0[oo_dim:].reshape(vv_shape)
+            full = xy[nocc*nocc:].reshape(vv_shape)
+            full0 = xy0[nocc*nocc:].reshape(vv_shape)
         else:
             if multi == 's':
                 oo_shape = (nocc + 1, nocc // 2)
