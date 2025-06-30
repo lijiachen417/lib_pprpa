@@ -780,6 +780,7 @@ class ppRPA_Davidson():
 
     def check_parameter(self):
         assert self.channel in ["pp", "hh"]
+        assert self.trial in ["identity", "subspace"]
 
         assert self.multi in ["s", "t"]
         if self.multi == "s":
