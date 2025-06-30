@@ -35,7 +35,6 @@ else:
 # get density-fitting matrix in MO space
 nmo = len(mf.mo_energy)
 nocc = mf.mol.nelectron // 2
-nvir = nmo - nocc
 naux = mf.with_df.get_naoaux()
 mo = numpy.asarray(mf.mo_coeff, order="F")
 ijslice = (0, nmo, 0, nmo)
