@@ -58,7 +58,7 @@ for ppRPA in pp_RPA_functions:
     print(f"Testing {ppRPA.__name__}...")
     try:
         pprpa = ppRPA(
-            nocc, mf.mo_energy, Lpq, mo_dip=mo_dip, osc_channel="hh", pp_state=0
+            nocc, mf.mo_energy, Lpq, mo_dip=mo_dip, osc_channel="hh", pp_state=0, nelec="n+2"
         )
         # pprpa.kernel("ab")
         # pprpa.analyze_ab()
