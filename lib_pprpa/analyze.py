@@ -263,18 +263,20 @@ def get_pprpa_oscillator_strength(
         f (double): oscillator strength.
     """
     from lib_pprpa.grad.grad_utils import get_xy_full
+
+    if multi == 's':
+        oo_dim = (nocc + 1) * nocc // 2
+    elif multi == 't':
+        oo_dim = (nocc - 1) * nocc // 2
+    else: # 'ab'
+        oo_dim = nocc * nocc
     
     if channel == 'pp':
         if multi == 'ab':
             vv_shape = (nvir, nvir)
-            full = xy[nocc*nocc:].reshape(vv_shape)
-            full0 = xy0[nocc*nocc:].reshape(vv_shape)
+            full = xy[oo_dim:].reshape(vv_shape)
+            full0 = xy0[oo_dim:].reshape(vv_shape)
         else:
-            if multi == 's':
-                oo_shape = (nocc + 1, nocc // 2)
-            elif multi == 't':
-                oo_shape = (nocc - 1, nocc // 2)
-            oo_dim = numpy.prod(oo_shape)
             _, full = get_xy_full(xy, oo_dim, mult=multi)
             _, full0 = get_xy_full(xy0, oo_dim, mult=multi)
         
@@ -293,8 +295,30 @@ def get_pprpa_oscillator_strength(
         #trans_dip -= numpy.einsum(
         # 'ab,ba,rmm->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
 
-        # |<Psi_0|r|Psi_m>|^2
-        f = 2.0 / 3.0 * (exci - exci0) * numpy.sum(trans_dip**2)
-    else:
-        raise NotImplementedError('hh-TDA oscillator strength not implemented.')
+    else: # hh
+        if multi == 'ab':
+            oo_shape = (nocc, nocc)
+            full = xy[:oo_dim].reshape(oo_shape)
+            full0 = xy0[:oo_dim].reshape(oo_shape)
+        else:
+            full, _ = get_xy_full(xy, oo_dim, mult=multi)
+            full0, _ = get_xy_full(xy0, oo_dim, mult=multi)
+
+        # calculate transition dipole <Psi_0|r|Psi_m>
+        trans_dip = numpy.zeros(shape=[3], dtype=numpy.double)
+        trans_dip += numpy.einsum(
+            'ij,ij,rpp->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+        trans_dip -= numpy.einsum(
+            'ij,ji,rpp->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+        trans_dip -= numpy.einsum(
+            'ij,ip,rpj->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+        trans_dip += numpy.einsum(
+            'ij,jp,rpi->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+        trans_dip += numpy.einsum(
+            'ij,pi,rpj->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+        trans_dip -= numpy.einsum(
+            'ij,pj,rpi->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+        
+    # |<Psi_0|r|Psi_m>|^2
+    f = 2.0 / 3.0 * (exci - exci0) * numpy.sum(trans_dip**2)
     return f
