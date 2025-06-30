@@ -270,7 +270,10 @@ def get_pprpa_oscillator_strength(
         oo_dim = (nocc - 1) * nocc // 2
     else: # 'ab'
         oo_dim = nocc * nocc
-    
+
+    ints_oo = mo_dip[:,:nocc,:nocc]
+    ints_vv = mo_dip[:,nocc:,nocc:]
+
     if channel == 'pp':
         if multi == 'ab':
             vv_shape = (nvir, nvir)
@@ -283,17 +286,17 @@ def get_pprpa_oscillator_strength(
         # calculate transition dipole <Psi_0|r|Psi_m>
         trans_dip = numpy.zeros(shape=[3], dtype=numpy.double)
         trans_dip += numpy.einsum(
-            'ab,ad,rdb->r', full0, full, mo_dip[:,nocc:,nocc:], optimize=True)
+            'ab,ad,rdb->r', full0, full, ints_vv, optimize=True)
         #trans_dip -= numpy.einsum(
-        # 'ab,ca,rcb->r', full0, full, mo_dip[:,nocc:,nocc:], optimize=True)
+        # 'ab,ca,rcb->r', full0, full, ints_vv, optimize=True)
         #trans_dip -= numpy.einsum(
-        # 'ab,bd,rda->r', full0, full, mo_dip[:,nocc:,nocc:], optimize=True)
+        # 'ab,bd,rda->r', full0, full, ints_vv, optimize=True)
         trans_dip += numpy.einsum(
-            'ab,cb,rca->r', full0, full, mo_dip[:,nocc:,nocc:], optimize=True)
+            'ab,cb,rca->r', full0, full, ints_vv, optimize=True)
         trans_dip += 2.0 * numpy.einsum(
-            'ab,ab,rmm->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+            'ab,ab,rmm->r', full0, full, ints_oo, optimize=True)
         #trans_dip -= numpy.einsum(
-        # 'ab,ba,rmm->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+        # 'ab,ba,rmm->r', full0, full, ints_oo, optimize=True)
 
     else: # hh
         if multi == 'ab':
@@ -307,17 +310,17 @@ def get_pprpa_oscillator_strength(
         # calculate transition dipole <Psi_0|r|Psi_m>
         trans_dip = numpy.zeros(shape=[3], dtype=numpy.double)
         trans_dip += numpy.einsum(
-            'ij,ij,rpp->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+            'ij,ij,rpp->r', full0, full, ints_oo, optimize=True)
         trans_dip -= numpy.einsum(
-            'ij,ji,rpp->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+            'ij,ji,rpp->r', full0, full, ints_oo, optimize=True)
         trans_dip -= numpy.einsum(
-            'ij,ip,rpj->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+            'ij,ip,rpj->r', full0, full, ints_oo, optimize=True)
         trans_dip += numpy.einsum(
-            'ij,jp,rpi->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+            'ij,jp,rpi->r', full0, full, ints_oo, optimize=True)
         trans_dip += numpy.einsum(
-            'ij,pi,rpj->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+            'ij,pi,rpj->r', full0, full, ints_oo, optimize=True)
         trans_dip -= numpy.einsum(
-            'ij,pj,rpi->r', full0, full, mo_dip[:,:nocc,:nocc], optimize=True)
+            'ij,pj,rpi->r', full0, full, ints_oo, optimize=True)
         
     # |<Psi_0|r|Psi_m>|^2
     f = 2.0 / 3.0 * (exci - exci0) * numpy.sum(trans_dip**2)
