@@ -287,16 +287,16 @@ def get_pprpa_oscillator_strength(
         trans_dip = numpy.zeros(shape=[3], dtype=numpy.double)
         trans_dip += numpy.einsum(
             'ab,ad,rdb->r', full0, full, ints_vv, optimize=True)
-        #trans_dip -= numpy.einsum(
-        # 'ab,ca,rcb->r', full0, full, ints_vv, optimize=True)
-        #trans_dip -= numpy.einsum(
-        # 'ab,bd,rda->r', full0, full, ints_vv, optimize=True)
+        trans_dip -= numpy.einsum(
+        'ab,ca,rcb->r', full0, full, ints_vv, optimize=True)
+        trans_dip -= numpy.einsum(
+        'ab,bd,rda->r', full0, full, ints_vv, optimize=True)
         trans_dip += numpy.einsum(
             'ab,cb,rca->r', full0, full, ints_vv, optimize=True)
         trans_dip += 2.0 * numpy.einsum(
             'ab,ab,rmm->r', full0, full, ints_oo, optimize=True)
-        #trans_dip -= numpy.einsum(
-        # 'ab,ba,rmm->r', full0, full, ints_oo, optimize=True)
+        trans_dip -= numpy.einsum(
+        'ab,ba,rmm->r', full0, full, ints_oo, optimize=True)
 
     else: # hh
         if multi == 'ab':
