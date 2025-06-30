@@ -66,10 +66,10 @@ def kernel(pprpa):
         print("add %d new trial vectors." % (ntri - ntri_old))
 
         iter += 1
-        if conv is True:
+        if conv:
             break
 
-    assert conv is True, "ppRPA Davidson algorithm is not converged!"
+    assert conv, "ppRPA Davidson algorithm is not converged!"
     print("\nppRPA Davidson converged in %d iterations, final subspace size = %d" % (
         iter, nprod))
 
