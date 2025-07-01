@@ -279,48 +279,51 @@ def get_pprpa_oscillator_strength(
             vv_shape = (nvir, nvir)
             full = xy[oo_dim:].reshape(vv_shape)
             full0 = xy0[oo_dim:].reshape(vv_shape)
+            # calculate transition dipole <Psi_0|r|Psi_m>
+            trans_dip = numpy.zeros(shape=[3], dtype=numpy.double)
+            trans_dip += numpy.einsum(
+                'ab,ad,rdb->r', full0, full, ints_vv, optimize=True)
+            # trans_dip -= numpy.einsum(
+            # 'ab,ca,rcb->r', full0, full, ints_vv, optimize=True)
+            # trans_dip -= numpy.einsum(
+            # 'ab,bd,rda->r', full0, full, ints_vv, optimize=True)
+            trans_dip += numpy.einsum(
+                'ab,cb,rca->r', full0, full, ints_vv, optimize=True)
+            # trans_dip += 2.0 * numpy.einsum(
+            #     'ab,ab,rmm->r', full0, full, ints_oo, optimize=True)
+            trans_dip -= numpy.einsum(
+            'ab,ba,rmm->r', full0, full, ints_oo, optimize=True)
         else:
             _, full = get_xy_full(xy, oo_dim, mult=multi)
             _, full0 = get_xy_full(xy0, oo_dim, mult=multi)
         
-        # calculate transition dipole <Psi_0|r|Psi_m>
-        trans_dip = numpy.zeros(shape=[3], dtype=numpy.double)
-        trans_dip += numpy.einsum(
-            'ab,ad,rdb->r', full0, full, ints_vv, optimize=True)
-        trans_dip -= numpy.einsum(
-        'ab,ca,rcb->r', full0, full, ints_vv, optimize=True)
-        trans_dip -= numpy.einsum(
-        'ab,bd,rda->r', full0, full, ints_vv, optimize=True)
-        trans_dip += numpy.einsum(
-            'ab,cb,rca->r', full0, full, ints_vv, optimize=True)
-        trans_dip += 2.0 * numpy.einsum(
-            'ab,ab,rmm->r', full0, full, ints_oo, optimize=True)
-        trans_dip -= numpy.einsum(
-        'ab,ba,rmm->r', full0, full, ints_oo, optimize=True)
+            raise NotImplementedError(
+                "ppRPA oscillator strength for multi=%s is not implemented." % multi)
 
     else: # hh
         if multi == 'ab':
             oo_shape = (nocc, nocc)
             full = xy[:oo_dim].reshape(oo_shape)
             full0 = xy0[:oo_dim].reshape(oo_shape)
+            # calculate transition dipole <Psi_0|r|Psi_m>
+            trans_dip = numpy.zeros(shape=[3], dtype=numpy.double)
+            trans_dip += numpy.einsum(
+                'ij,ij,rpp->r', full0, full, ints_oo, optimize=True)
+            # trans_dip -= numpy.einsum(
+            #     'ij,ji,rpp->r', full0, full, ints_oo, optimize=True)
+            # trans_dip -= numpy.einsum(
+            #     'ij,ip,rpj->r', full0, full, ints_oo, optimize=True)
+            trans_dip += numpy.einsum(
+                'ij,jp,rpi->r', full0, full, ints_oo, optimize=True)
+            # trans_dip += numpy.einsum(
+            #     'ij,pi,rpj->r', full0, full, ints_oo, optimize=True)
+            trans_dip -= numpy.einsum(
+                'ij,pj,rpi->r', full0, full, ints_oo, optimize=True)
         else:
             full, _ = get_xy_full(xy, oo_dim, mult=multi)
             full0, _ = get_xy_full(xy0, oo_dim, mult=multi)
-
-        # calculate transition dipole <Psi_0|r|Psi_m>
-        trans_dip = numpy.zeros(shape=[3], dtype=numpy.double)
-        trans_dip += numpy.einsum(
-            'ij,ij,rpp->r', full0, full, ints_oo, optimize=True)
-        trans_dip -= numpy.einsum(
-            'ij,ji,rpp->r', full0, full, ints_oo, optimize=True)
-        trans_dip -= numpy.einsum(
-            'ij,ip,rpj->r', full0, full, ints_oo, optimize=True)
-        trans_dip += numpy.einsum(
-            'ij,jp,rpi->r', full0, full, ints_oo, optimize=True)
-        trans_dip += numpy.einsum(
-            'ij,pi,rpj->r', full0, full, ints_oo, optimize=True)
-        trans_dip -= numpy.einsum(
-            'ij,pj,rpi->r', full0, full, ints_oo, optimize=True)
+            raise NotImplementedError(
+                "hhRPA oscillator strength for multi=%s is not implemented." % multi) 
         
     # |<Psi_0|r|Psi_m>|^2
     f = 2.0 / 3.0 * (exci - exci0) * numpy.sum(trans_dip**2)
