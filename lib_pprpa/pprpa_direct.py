@@ -426,7 +426,7 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
             f = get_pprpa_oscillator_strength(
                 nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
                 exci=exci[oo_dim-istate-1], exci0=exci0,
-                xy=xy[oo_dim-istate-1], xy0=xy[oo_dim-istate-1], multi=multi)
+                xy=xy[oo_dim-istate-1], xy0=xy[oo_dim-1], multi=multi)
             print("#    oscillator strength = %-12.6f  a.u." % f)
         full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
         full[tri_row_o, tri_col_o] = xy[oo_dim-istate-1][:oo_dim]
@@ -454,7 +454,7 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
             f = get_pprpa_oscillator_strength(
                 nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
                 exci=exci[oo_dim+istate], exci0=exci0,
-                xy=xy[oo_dim+istate], xy0=xy[oo_dim+istate], multi=multi)
+                xy=xy[oo_dim+istate], xy0=xy[oo_dim], multi=multi)
             print("#    oscillator strength = %-12.6f  a.u." % f)
         full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
         full[tri_row_o, tri_col_o] = xy[oo_dim+istate][:oo_dim]

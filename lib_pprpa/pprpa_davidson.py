@@ -648,7 +648,7 @@ def _pprpa_print_eigenvector(
                 f = get_pprpa_oscillator_strength(
                     nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=channel,
                     exci=exci[iroot], exci0=exci0,
-                    xy=xy[iroot], xy0=xy[iroot], multi=multi)
+                    xy=xy[iroot], xy0=xy[0], multi=multi)
                 print("#    oscillator strength = %-12.6f  a.u." % f)
             if nocc > 0:
                 full = np.zeros(shape=[nocc, nocc], dtype=np.double)
@@ -676,7 +676,7 @@ def _pprpa_print_eigenvector(
                 f = get_pprpa_oscillator_strength(
                     nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=channel,
                     exci=exci[iroot], exci0=exci0,
-                    xy=xy[iroot], xy0=xy[iroot], multi=multi)
+                    xy=xy[iroot], xy0=xy[0], multi=multi)
                 print("#    oscillator strength = %-12.6f  a.u." % f)
             full = np.zeros(shape=[nocc, nocc], dtype=np.double)
             full[tri_row_o, tri_col_o] = xy[iroot][:oo_dim]
