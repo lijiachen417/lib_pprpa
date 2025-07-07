@@ -236,6 +236,33 @@ def get_pprpa_dm(multi, state, xy, nocc, nvir, mo_coeff, nocc_full,
         return dm, dm1h, dm1p, dm2h, dm2p
 
 
+def symmetrize_amplitude(xy, multi="s"):
+    """
+    Symmetrize the amplitude matrix for use in ppRPA oscillator strength calculation.
+    See strings for each case for details of each multiplicity.
+    """
+    assert multi in ["s", "t"], "multi must be 's' or 't'."
+    x_sym = numpy.zeros_like(xy, dtype=numpy.double)
+    ab_part = numpy.tril(xy, k=-1)
+    ba_part = numpy.triu(xy.T, k=1)    
+    if multi == "s":
+        """
+        X_ab = 1/sqrt(2) * x_ab for a>b
+        X_ab = 1/sqrt(2) * x_ba for a<b
+        X_aa = x_aa for a=b
+        """
+        x_sym = (ab_part + ba_part) / numpy.sqrt(2.0)
+        numpy.fill_diagonal(x_sym, numpy.diag(xy))
+    else:
+        """
+        X_ab = 1/sqrt(2) * x_ab for a>b
+        X_ab = -1/sqrt(2) * x_ba for a<b
+        X_aa = 0 for a=b
+        """
+        x_sym = (ab_part - ba_part) / numpy.sqrt(2.0)
+        # diagonal is left at 0
+    return x_sym
+
 # oscillator strength
 def get_pprpa_oscillator_strength(
         nocc, nvir, mo_dip, channel, exci, exci0, xy, xy0, multi='ab'):
@@ -297,9 +324,11 @@ def get_pprpa_oscillator_strength(
             _, full = get_xy_full(xy, oo_dim, mult=multi)
             _, full0 = get_xy_full(xy0, oo_dim, mult=multi)
         
-            raise NotImplementedError(
-                "ppRPA oscillator strength for multi=%s is not implemented." % multi)
+            # full = symmetrize_amplitude(full, multi)
+            # full0 = symmetrize_amplitude(full0, multi)
 
+            tdm = 2 * numpy.einsum("pa,qa->pq", full0, full, optimize=True)
+            trans_dip = numpy.einsum("pq,rpq->r", tdm, ints_vv, optimize=True)
     else: # hh
         if multi == 'ab':
             oo_shape = (nocc, nocc)
