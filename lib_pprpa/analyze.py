@@ -327,7 +327,7 @@ def get_pprpa_oscillator_strength(
             # full = symmetrize_amplitude(full, multi)
             # full0 = symmetrize_amplitude(full0, multi)
 
-            tdm = 2 * numpy.einsum("pa,qa->pq", full0, full, optimize=True)
+            tdm = numpy.einsum("pa,qa->pq", full0, full, optimize=True)
             trans_dip = numpy.einsum("pq,rpq->r", tdm, ints_vv, optimize=True)
     else: # hh
         if multi == 'ab':
