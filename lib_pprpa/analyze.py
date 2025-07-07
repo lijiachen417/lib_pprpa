@@ -320,9 +320,9 @@ def get_pprpa_oscillator_strength(
         else:
             full, _ = get_xy_full(xy, oo_dim, mult=multi)
             full0, _ = get_xy_full(xy0, oo_dim, mult=multi)
-            raise NotImplementedError(
-                "hhRPA oscillator strength for multi=%s is not implemented." % multi) 
-        
+
+            trans_dip = -numpy.einsum("pj,qj,rpq->r", full0, full, ints_oo, optimize=True)
+
     # |<Psi_0|r|Psi_m>|^2
     f = 2.0 / 3.0 * (exci - exci0) * numpy.sum(trans_dip**2)
     return f
