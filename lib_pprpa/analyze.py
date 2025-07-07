@@ -297,8 +297,7 @@ def get_pprpa_oscillator_strength(
             _, full = get_xy_full(xy, oo_dim, mult=multi)
             _, full0 = get_xy_full(xy0, oo_dim, mult=multi)
         
-            tdm = numpy.einsum("pa,qa->pq", full0, full, optimize=True)
-            trans_dip = numpy.einsum("pq,rpq->r", tdm, ints_vv, optimize=True)
+            trans_dip = numpy.einsum("pa,qa,rpq->r", full0, full, ints_vv, optimize=True)
     else: # hh
         if multi == 'ab':
             oo_shape = (nocc, nocc)
