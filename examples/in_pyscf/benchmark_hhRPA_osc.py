@@ -54,4 +54,4 @@ mytd = mf2.TDA()
 mytd.singlet = True
 mytd.nstates = 5
 mytd.kernel()
-mytd.analyze(verbose=3)
+mytd.analyze(verbose=4)
