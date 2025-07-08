@@ -612,7 +612,7 @@ def _pprpa_compact_space(pprpa, first_state, tri_vec, tri_vec_sig, mv_prod, v_tr
 
 # analysis functions
 def _pprpa_print_eigenvector(
-        multi, nocc, nvir, thresh, channel, exci0, exci, xy, mo_dip=None):
+        multi, nocc, nvir, thresh, channel, exci0, exci, xy, mo_dip=None, first_state_e=None):
     """Print dominant components of an eigenvector.
 
     Args:
@@ -624,6 +624,9 @@ def _pprpa_print_eigenvector(
         exci0 (double): lowest eigenvalue.
         exci (double array): ppRPA eigenvalue.
         xy (double ndarray): ppRPA eigenvector.
+        mo_dip (double ndarray, optional): molecular dipole moment integrals.
+            Defaults to None.
+        first_state_e (double, optional): energy of the first state.
     """
     if multi == "s":
         oo_dim = int((nocc + 1) * nocc / 2)
@@ -637,6 +640,11 @@ def _pprpa_print_eigenvector(
     tri_row_o, tri_col_o = np.tril_indices(nocc, is_singlet-1)
     tri_row_v, tri_col_v = np.tril_indices(nvir, is_singlet-1)
 
+    if first_state_e is not None:
+        e0 = first_state_e
+    else:
+        e0 = exci0
+    
     nroot = len(exci)
     au2ev = 27.211386
     if channel == "pp":
@@ -647,7 +655,7 @@ def _pprpa_print_eigenvector(
             if mo_dip is not None:
                 f = get_pprpa_oscillator_strength(
                     nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=channel,
-                    exci=exci[iroot], exci0=exci0,
+                    exci=exci[iroot], exci0=e0,
                     xy=xy[iroot], xy0=xy[0], multi=multi)
                 print("#    oscillator strength = %-12.6f  a.u." % f)
             if nocc > 0:
@@ -675,7 +683,7 @@ def _pprpa_print_eigenvector(
             if mo_dip is not None:
                 f = get_pprpa_oscillator_strength(
                     nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=channel,
-                    exci=exci[iroot], exci0=exci0,
+                    exci=exci[iroot], exci0=e0,
                     xy=xy[iroot], xy0=xy[0], multi=multi)
                 print("#    oscillator strength = %-12.6f  a.u." % f)
             full = np.zeros(shape=[nocc, nocc], dtype=np.double)
@@ -710,10 +718,10 @@ def _analyze_pprpa_davidson(
             exci0 = max(exci_s[0], exci_t[0])
         _pprpa_print_eigenvector(
             multi="s", nocc=nocc, nvir=nvir, thresh=print_thresh,
-            channel=channel, exci0=exci0, exci=exci_s, xy=xy_s, mo_dip=mo_dip)
+            channel=channel, exci0=exci0, exci=exci_s, xy=xy_s, mo_dip=mo_dip, first_state_e = exci_s[0])
         _pprpa_print_eigenvector(
             multi="t", nocc=nocc, nvir=nvir, thresh=print_thresh,
-            channel=channel, exci0=exci0, exci=exci_t, xy=xy_t, mo_dip=mo_dip)
+            channel=channel, exci0=exci0, exci=exci_t, xy=xy_t, mo_dip=mo_dip, first_state_e = exci_t[0])
     else:
         if exci_s is not None:
             print("only singlet results found.")

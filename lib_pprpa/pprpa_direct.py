@@ -387,7 +387,7 @@ def pprpa_orthonormalize_eigenvector(multi, nocc, exci, xy):
 
 # analysis functions
 def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
-                             pp_state, exci0, exci, xy, mo_dip=None, osc_channel='pp'):
+                             pp_state, exci0, exci, xy, mo_dip=None, osc_channel='pp', first_state_e=None):
     """Print dominant components of an eigenvector.
 
     Args:
@@ -401,6 +401,12 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
         exci0 (double): lowest eigenvalue.
         exci (double array): ppRPA eigenvalue.
         xy (double ndarray): ppRPA eigenvector.
+        mo_dip (double ndarray, optional): molecular dipole moment in MO basis.
+            Defaults to None.
+        osc_channel (string, optional): oscillator strength channel, 'pp' or 'hh'.
+            Defaults to 'pp'.
+        first_state_e (double, optional): energy of the first state of `multi` if different from `exci0`.
+            Defaults to None.
     """
     if multi == "s":
         oo_dim = int((nocc + 1) * nocc / 2)
@@ -418,6 +424,11 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
 
     au2ev = 27.211386
 
+    if first_state_e is not None:
+        e0 = first_state_e
+    else:
+        e0 = exci0
+
     for istate in range(min(hh_state, oo_dim)):
         print("#%-d %s de-excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
               (istate + 1, multi, (exci[oo_dim-istate-1] - exci0) * au2ev,
@@ -425,7 +436,7 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
         if mo_dip is not None:
             f = get_pprpa_oscillator_strength(
                 nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
-                exci=exci[oo_dim-istate-1], exci0=exci0,
+                exci=exci[oo_dim-istate-1], exci0=e0,
                 xy=xy[oo_dim-istate-1], xy0=xy[oo_dim-1], multi=multi)
             print("#    oscillator strength = %-12.6f  a.u." % f)
         full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
@@ -453,7 +464,7 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
         if mo_dip is not None:
             f = get_pprpa_oscillator_strength(
                 nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
-                exci=exci[oo_dim+istate], exci0=exci0,
+                exci=exci[oo_dim+istate], exci0=e0,
                 xy=xy[oo_dim+istate], xy0=xy[oo_dim], multi=multi)
             print("#    oscillator strength = %-12.6f  a.u." % f)
         full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
@@ -483,22 +494,27 @@ def _analyze_pprpa_direct(
     print("\nanalyze ppRPA results.")
     oo_dim_s = int((nocc + 1) * nocc / 2)
     oo_dim_t = int((nocc - 1) * nocc / 2)
+    
     if exci_s is not None and exci_t is not None:
         print("both singlet and triplet results found.")
         if nelec == "n-2":
-            exci0 = min(exci_s[oo_dim_s], exci_t[oo_dim_t])
+            e0t = exci_t[oo_dim_t]
+            e0s = exci_s[oo_dim_s]
+            exci0 = min(e0s, e0t)
         else:
-            exci0 = max(exci_s[oo_dim_s-1], exci_t[oo_dim_t-1])
+            e0t = exci_t[oo_dim_t-1]
+            e0s = exci_s[oo_dim_s-1]
+            exci0 = max(e0s, e0t)
         _pprpa_print_eigenvector(
             multi="s", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
             thresh=print_thresh,
             hh_state=hh_state, pp_state=pp_state, exci0=exci0,
-            exci=exci_s, xy=xy_s, mo_dip=mo_dip, osc_channel=osc_channel)
+            exci=exci_s, xy=xy_s, mo_dip=mo_dip, osc_channel=osc_channel, first_state_e=e0s)
         _pprpa_print_eigenvector(
             multi="t", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
             thresh=print_thresh,
             hh_state=hh_state, pp_state=pp_state, exci0=exci0,
-            exci=exci_t, xy=xy_t, mo_dip=mo_dip, osc_channel=osc_channel)
+            exci=exci_t, xy=xy_t, mo_dip=mo_dip, osc_channel=osc_channel, first_state_e=e0t)
     else:
         if exci_s is not None:
             print("only singlet results found.")
