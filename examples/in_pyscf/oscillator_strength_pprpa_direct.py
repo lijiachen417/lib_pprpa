@@ -3,6 +3,7 @@ import numpy
 from pyscf import df, gto, scf
 from pyscf.ao2mo import _ao2mo
 from pyscf.tdscf.rhf import _charge_center
+from lib_pprpa.pyscf_util import get_pyscf_input_mol
 
 from lib_pprpa.pprpa_direct import ppRPA_direct
 from lib_pprpa.pprpa_davidson import ppRPA_Davidson
@@ -21,27 +22,7 @@ mol.build()
 mf = scf.RHF(mol)
 mf.kernel()
 
-# get density-fitting matrix in AO
-if getattr(mf, "with_df", None):
-    pass
-else:
-    mf.with_df = df.DF(mf.mol)
-    try:
-        mf.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=True)
-    except:
-        mf.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=False)
-    mf._keys.update(["with_df"])
-
-# get density-fitting matrix in MO space
-nmo = len(mf.mo_energy)
-nocc = mf.mol.nelectron // 2
-naux = mf.with_df.get_naoaux()
 mo = numpy.asarray(mf.mo_coeff, order="F")
-ijslice = (0, nmo, 0, nmo)
-Lpq = None
-Lpq = _ao2mo.nr_e2(mf.with_df._cderi, mo, ijslice, aosym="s2", out=Lpq)
-Lpq = Lpq.reshape(naux, nmo, nmo)
-
 # Same formulation as in the TDDFT module
 with mol.with_common_orig(_charge_center(mol)):
     ao_dip = mol.intor_symmetric("int1e_r", comp=3)
@@ -52,7 +33,8 @@ pp_RPA_functions = [
     ppRPA_Davidson,
     ppRPA_direct,
 ]
-
+# nocc, mo_energy, Lpq = get_pyscf_input_mol(mf)
+nocc, mo_energy, Lpq, mo_dip = get_pyscf_input_mol(mf, with_dip=True)
 for ppRPA in pp_RPA_functions:
     print(f"Testing {ppRPA.__name__}...")
     try:
