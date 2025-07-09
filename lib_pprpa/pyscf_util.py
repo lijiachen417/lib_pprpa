@@ -2,10 +2,12 @@ import h5py
 import math
 import numpy
 import scipy
-import scipy.linalg
 
-from pyscf import ao2mo
+import pyscf
+import pyscf.dft
 from pyscf.lib import unpack_tril
+from pyscf import df
+from pyscf.ao2mo import _ao2mo
 
 from lib_pprpa.analyze import get_pprpa_nto, get_pprpa_dm
 from lib_pprpa.pprpa_util import start_clock, stop_clock, get_nocc_nvir_frac
@@ -20,7 +22,6 @@ def get_pyscf_input_mol(
     Will be saved to a file if `dump_file` is specified.
     mo_dipole will also be saved if `with_dip` is True. Only implemented for RHF/RKS.
     """
-    import pyscf
 
     if isinstance(mf, pyscf.scf.uhf.UHF) or isinstance(mf, pyscf.dft.uks.UKS):
         return get_pyscf_input_mol_u(
@@ -66,8 +67,6 @@ def get_pyscf_input_mol_r(
         mo_energy_act (double array): orbital energy in the active space.
         Lpq (double ndarray): three-center density-fitting matrix in active MO space.
     """
-    from pyscf import df
-    from pyscf.ao2mo import _ao2mo
 
     start_clock("getting input for molecule ppRPA from PySCF")
 
@@ -208,8 +207,6 @@ def get_pyscf_input_mol_u(
         Lpq (list of double ndarray): three-center density fitting matrix
             in the active MO space.
     """
-    from pyscf import df
-    from pyscf.ao2mo import _ao2mo
 
     start_clock("getting input for unrestricted ppRPA from PySCF")
 
@@ -408,7 +405,6 @@ def nr_e2_cross(
     Returns:
         Lpq (double ndarray): density fitting MO integrals.
     """
-    from pyscf.ao2mo import _ao2mo
     mo_coeff = numpy.asarray(numpy.hstack((mo_coeff1, mo_coeff2)), order='F')
     offset_mo1 = mo_coeff1.shape[1]
     ijslice = (nocc-nocc_act, nocc+nvir_act,
@@ -436,7 +432,6 @@ def get_Lmo_ghf(mf, naux=None, mo_coeff=None, nocc_act=None, nvir_act=None):
             in active space (naux, nmo_act, nmo_act).
     """
     from pyscf import scf, dft
-    from pyscf.ao2mo import _ao2mo
 
     if mo_coeff is None:
         mo_coeff = mf.mo_coeff
@@ -576,8 +571,6 @@ def get_pyscf_input_mol_g(
     nmo_act = nocc_act + nvir_act
     mo_energy_act = mo_energy[(nocc - nocc_act) : (nocc + nvir_act)]
 
-    from pyscf import df
-
     if getattr(mf, 'with_df', None):
         pass
     else:
@@ -636,8 +629,6 @@ def get_pyscf_input_mol_frac(
         Lpq (list of double ndarray): three-center density fitting matrix
             in the active MO space.
     """
-    from pyscf import df
-    from pyscf.ao2mo import _ao2mo
 
     start_clock("getting input for ppRPA with fractional occupation from PySCF")
 
@@ -750,7 +741,6 @@ def get_pyscf_input_sc(
         Lpq (double ndarray): three-center density-fitting matrix in active MO space.
     """
     from pyscf import lib
-    from pyscf.ao2mo import _ao2mo
     from pyscf.pbc.df.fft_ao2mo import _format_kpts
 
     start_clock("getting input for supercell ppRPA from PySCF")
@@ -828,7 +818,6 @@ def get_pyscf_input_sc_g(kmf, nocc_act=None, nvir_act=None, dump_file=None):
         Lpq (double/complex ndarray): three-center density-fitting matrix in active MO space.
     """
     from pyscf import lib
-    from pyscf.ao2mo import _ao2mo
     from pyscf.pbc.df.fft_ao2mo import _format_kpts
 
     start_clock("getting input for supercell ppRPA from PySCF")
@@ -1060,8 +1049,6 @@ def get_fxc_u(mf, Lpq=None, nocc_act=None, nvir_act=None, add_frac_e=True):
         fxc_mat (list of numpy.ndarray): fxc matrices in orbital space,
             (aaaa, bbbb, aabb). bbaa = aabb.transpose(2, 3, 0, 1).
     """
-    import pyscf
-    from pyscf import ao2mo
     start_clock("getting fxc for molecule UppRPAw from PySCF")
     mo = mf.mo_coeff
     moa = mo[0]

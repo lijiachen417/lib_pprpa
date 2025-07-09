@@ -1,10 +1,5 @@
-import numpy
+from pyscf import gto, scf
 
-from pyscf import df, gto, scf
-from pyscf.ao2mo import _ao2mo
-from pyscf.tdscf.rhf import _charge_center
-
-from lib_pprpa.pprpa_direct import ppRPA_direct
 from lib_pprpa.pprpa_davidson import ppRPA_Davidson
 from lib_pprpa.pyscf_util import get_pyscf_input_mol
 molecule = [
