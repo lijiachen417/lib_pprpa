@@ -105,6 +105,8 @@ def get_pyscf_input_mol_r(
         with mol.with_common_orig(_charge_center(mol)):
             ao_dip = mol.intor_symmetric("int1e_r", comp=3)
         mo_dip = mo_coeff.T @ ao_dip @ mo_coeff
+        # mo2 = numpy.einsum('xpq,pi,qj->xij', ao_dip.reshape(-1,nmo,nmo), mo_coeff, mo_coeff.conj())
+        # assert numpy.allclose(mo2, mo_dip)
         mo_dip = mo_dip[:, (nocc - nocc_act) : (nocc + nvir_act), (nocc - nocc_act) : (nocc + nvir_act)]
         print("Done calculating dip.")
 
