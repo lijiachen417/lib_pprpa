@@ -1,4 +1,4 @@
-import numpy, sys, os
+import numpy, sys
 from io import StringIO
 from pyscf import gto, scf
 from lib_pprpa.pyscf_util import get_pyscf_input_mol
