@@ -23,7 +23,7 @@ def test_direct_Davidson_osc_agreement():
 
     pp_RPA_functions = [ppRPA_Davidson, ppRPA_direct]
     osc_lists = [[], []]
-    nocc, mo_energy, Lpq, mo_dip = get_pyscf_input_mol(mf, calc_dip=True)
+    nocc, mo_energy, Lpq, mo_dip = get_pyscf_input_mol(mf, with_dip=True)
     for ppRPA, lst in zip(pp_RPA_functions, osc_lists):
         try:
             pprpa = ppRPA( # direct function sig
