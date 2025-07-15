@@ -387,7 +387,7 @@ def pprpa_orthonormalize_eigenvector(multi, nocc, exci, xy):
 
 # analysis functions
 def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
-                             pp_state, exci0, exci, xy, mo_dip=None, osc_channel='pp', first_state_e=None):
+                             pp_state, exci0, exci, xy, mo_dip=None, osc_channel='pp', first_state_e=None, xy0_multi=None):
     """Print dominant components of an eigenvector.
 
     Args:
@@ -406,6 +406,8 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
         osc_channel (string, optional): oscillator strength channel, 'pp' or 'hh'.
             Defaults to 'pp'.
         first_state_e (double, optional): energy of the first state of `multi` if different from `exci0`.
+            Defaults to None.
+        xy0_multi (string, optional): multiplicity of the ground state eigenvector.
             Defaults to None.
     """
     if multi == "s":
@@ -437,7 +439,7 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
             f = get_pprpa_oscillator_strength(
                 nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
                 exci=exci[oo_dim-istate-1], exci0=e0,
-                xy=xy[oo_dim-istate-1], xy0=xy[oo_dim-1], multi=multi)
+                xy=xy[oo_dim-istate-1], xy0=xy[oo_dim-1], multi=multi, xy0_multi=xy0_multi)
             print("#    oscillator strength = %-12.6f  a.u." % f)
         full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
         full[tri_row_o, tri_col_o] = xy[oo_dim-istate-1][:oo_dim]
@@ -455,7 +457,7 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
             pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
                                percentage=full[a, b])
 
-        print("")
+        print()
 
     for istate in range(min(pp_state, vv_dim)):
         print("#%-d %s excitation:  exci= %-12.6f  eV   2e=  %-12.6f  eV" %
@@ -465,7 +467,7 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
             f = get_pprpa_oscillator_strength(
                 nocc=nocc, nvir=nvir, mo_dip=mo_dip, channel=osc_channel,
                 exci=exci[oo_dim+istate], exci0=e0,
-                xy=xy[oo_dim+istate], xy0=xy[oo_dim], multi=multi)
+                xy=xy[oo_dim+istate], xy0=xy[oo_dim], multi=multi, xy0_multi=xy0_multi)
             print("#    oscillator strength = %-12.6f  a.u." % f)
         full = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
         full[tri_row_o, tri_col_o] = xy[oo_dim+istate][:oo_dim]
@@ -483,7 +485,7 @@ def _pprpa_print_eigenvector(multi, nocc, nvir, nocc_fro, thresh, hh_state,
             pprpa_print_a_pair(is_pp=True, p=a+nocc_fro+nocc, q=b+nocc_fro+nocc,
                                percentage=full[a, b])
 
-        print("")
+        print()
 
     return
 
@@ -505,16 +507,23 @@ def _analyze_pprpa_direct(
             e0t = exci_t[oo_dim_t-1]
             e0s = exci_s[oo_dim_s-1]
             exci0 = max(e0s, e0t)
+
+        xy0_multi = None
+        if exci0 == e0s:
+            xy0_multi = "s"
+        else:
+            xy0_multi = "t"
+
         _pprpa_print_eigenvector(
             multi="s", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
             thresh=print_thresh,
             hh_state=hh_state, pp_state=pp_state, exci0=exci0,
-            exci=exci_s, xy=xy_s, mo_dip=mo_dip, osc_channel=osc_channel, first_state_e=e0s)
+            exci=exci_s, xy=xy_s, mo_dip=mo_dip, osc_channel=osc_channel, first_state_e=e0s, xy0_multi=xy0_multi)
         _pprpa_print_eigenvector(
             multi="t", nocc=nocc, nvir=nvir, nocc_fro=nocc_fro,
             thresh=print_thresh,
             hh_state=hh_state, pp_state=pp_state, exci0=exci0,
-            exci=exci_t, xy=xy_t, mo_dip=mo_dip, osc_channel=osc_channel, first_state_e=e0t)
+            exci=exci_t, xy=xy_t, mo_dip=mo_dip, osc_channel=osc_channel, first_state_e=e0t, xy0_multi=xy0_multi)
     else:
         if exci_s is not None:
             print("only singlet results found.")
