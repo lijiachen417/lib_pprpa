@@ -781,6 +781,7 @@ class ppRPA_direct():
         return
 
     def get_correlation(self):
+        self.multi = "t" # avoid failing check
         self.check_parameter()
         start_clock("ppRPA correlation energy")
         if self.ec_s is None:
