@@ -238,7 +238,7 @@ def get_pprpa_dm(multi, state, xy, nocc, nvir, mo_coeff, nocc_full,
 
 # oscillator strength
 def get_pprpa_oscillator_strength(
-        nocc, nvir, mo_dip, channel, exci, exci0, xy, xy0, multi='ab'):
+        nocc, nvir, mo_dip, channel, exci, exci0, xy, xy0, multi='ab', xy0_multi=None):
     """Compute oscillator strength from restricted pp-TDA or hh-TDA.
     For restricted case, ground state and all singlets are closed-shell.
     Thus, only alpha-beta-alpha-beta block is needed.
@@ -271,6 +271,11 @@ def get_pprpa_oscillator_strength(
     else: # 'ab'
         oo_dim = nocc * nocc
 
+    xy0_multi = xy0_multi if xy0_multi is not None else multi
+    # disallowed transition. XY and XY0 have different dimensions when expanded
+    if xy0_multi != multi:
+        return 0.0
+
     ints_oo = mo_dip[:,:nocc,:nocc]
     ints_vv = mo_dip[:,nocc:,nocc:]
 
@@ -296,7 +301,7 @@ def get_pprpa_oscillator_strength(
         else:
             _, full = get_xy_full(xy, oo_dim, mult=multi)
             _, full0 = get_xy_full(xy0, oo_dim, mult=multi)
-        
+
             trans_dip = numpy.einsum("pa,qa,rpq->r", full0, full, ints_vv, optimize=True)
     else: # hh
         if multi == 'ab':
