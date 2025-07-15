@@ -1,10 +1,5 @@
-import numpy
+from pyscf import gto, scf
 
-from pyscf import df, gto, scf
-from pyscf.ao2mo import _ao2mo
-from pyscf.tdscf.rhf import _charge_center
-
-from lib_pprpa.pprpa_direct import ppRPA_direct
 from lib_pprpa.pprpa_davidson import ppRPA_Davidson
 from lib_pprpa.pyscf_util import get_pyscf_input_mol
 
@@ -27,14 +22,7 @@ mol.build()
 mf = scf.RHF(mol)
 mf.kernel()
 
-mo = numpy.asarray(mf.mo_coeff, order="F")
-# Same formulation as in the TDDFT module
-with mol.with_common_orig(_charge_center(mol)):
-    ao_dip = mol.intor_symmetric("int1e_r", comp=3)
-# Convert AO dipole moment to MO dipole moment
-mo_dip = mo.T @ ao_dip @ mo
-
-nocc, mo_energy, Lpq = get_pyscf_input_mol(mf)
+nocc, mo_energy, Lpq, mo_dip = get_pyscf_input_mol(mf, with_dip=True)
 pprpa = ppRPA_Davidson(
     nocc, mo_energy, Lpq, mo_dip=mo_dip, channel="hh", nroot=5)
 pprpa.kernel("s")

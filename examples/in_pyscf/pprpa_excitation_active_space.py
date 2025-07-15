@@ -19,34 +19,7 @@ mol.build()
 mf = scf.RHF(mol)
 mf.kernel()
 
-# get density-fitting matrix in AO
-if getattr(mf, 'with_df', None):
-    pass
-else:
-    mf.with_df = df.DF(mf.mol)
-    try:
-        mf.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=True)
-    except:
-        mf.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=False)
-    mf._keys.update(['with_df'])
-
-nmo = len(mf.mo_energy)
-nocc = mf.mol.nelectron // 2
-nvir = nmo - nocc
-naux = mf.with_df.get_naoaux()
-nocc_act = 0  # number of active occupied orbitals
-nvir_act = 10  # number of active virtual orbitals
-nmo_act = nocc_act + nvir_act  # number of active orbitals
-nocc_fro = nocc - nocc_act  # number of frozen occupied orbitals
-nvir_fro = nvir - nvir_act  # number of frozen virtual orbitals
-
-# 1. get density-fitting matrix in full MO space and assign active space
-mo = numpy.asarray(mf.mo_coeff, order='F')
-ijslice = (0, nmo, 0, nmo)
-Lpq = None
-Lpq = _ao2mo.nr_e2(mf.with_df._cderi, mo, ijslice, aosym='s2', out=Lpq)
-Lpq = Lpq.reshape(naux, nmo, nmo)
-
+nocc, mo_energy, Lpq, mo_dip = get_pyscf_input_mol(mf, with_dip=True, nocc_act=nocc_act, nvir_act=nvir_act)
 pprpa = ppRPA_direct(nocc, mf.mo_energy, Lpq, nocc_act=nocc_act, nvir_act=nvir_act)
 pprpa.kernel("s")
 pprpa.kernel("t")
