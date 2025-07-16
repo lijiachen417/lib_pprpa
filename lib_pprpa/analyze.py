@@ -258,6 +258,9 @@ def get_pprpa_oscillator_strength(
         exci0 (double): ground-state eigenvalue.
         xy (double array): excited-state eigenvector.
         xy0 (double array): ground-state eigenvector.
+        multi (char): multiplicity of the excited state. One of 's', 't' or 'ab'.
+        xy0_multi (char): multiplicity of the ground state.
+
 
     Return:
         f (double): oscillator strength.
