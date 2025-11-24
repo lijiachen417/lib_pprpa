@@ -187,7 +187,7 @@ def choose_range(label, nfrozen_occ, nocc, nvir, nfrozen_vir):
         raise ValueError('label = {}. is not valid in choose_slice'.format(label))
 
 
-def contraction_1rdm_eri_diag(
+def contraction_1rdm_Lpq_diag(
     den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, label2, den_label='p', rhf=False
 ):
     r"""
@@ -220,7 +220,7 @@ def contraction_1rdm_eri_diag(
     return out
 
 
-def contraction_1rdm_eri(
+def contraction_1rdm_Lpq(
     den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, label2, den_label1='P', den_label2='P', rhf=False
 ):
     r"""
@@ -257,7 +257,7 @@ def contraction_1rdm_eri(
     return out
 
 
-def contraction_2rdm_eri(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, label2):
+def contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, label2):
     r"""
     Contraction in the form of (anti-symmetrized or symmetrized)
         I_{tp} = \frac{1}{2} \sum_{qrs} \Gamma_{pq,rs} \langle tq||rs \rangle
@@ -346,8 +346,8 @@ def contraction_2rdm_eri(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ
     elif label2 == 'p':
         # slow (more copies) but more readable version
         # out = np.concatenate((
-        # contraction_2rdm_eri(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "i"),
-        # contraction_2rdm_eri(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "a")), axis=1)
+        # contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "i"),
+        # contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "a")), axis=1)
         out = np.zeros((n1, nocc + nvir), dtype=occ_y_mat.dtype)
         L1i = np.ascontiguousarray(Lpq_full[:, slice1, slice_i]).reshape(-1, nocc)  # (Pt,k)
         Lia = np.ascontiguousarray(Lpq_full[:, slice_i, slice_a]).reshape(-1, nvir).conj()  # (P,l,b)*->(Pl,b)
@@ -369,7 +369,74 @@ def contraction_2rdm_eri(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ
         tmp = np.matmul(L1a, Lai)  # (t,Pd)(Pd,j)->(t,j)
         out[:, :nocc] += np.matmul(tmp, occ_y_mat.T.conj())  # (t,j)(j,i) -> (t,i)
     else:
-        raise ValueError('label2 = {}. is not valid in contraction_2rdm_eri'.format(label2))
+        raise ValueError('label2 = {}. is not valid in contraction_2rdm_Lpq'.format(label2))
+
+    return out
+
+
+def contraction_2rdm_eri(occ_y_mat, vir_x_mat, eri_X, eri_Y, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, label2):
+    r"""
+    Contraction in the form of (anti-symmetrized or symmetrized)
+        I_{tp} = \sum_{qrsP} XY_{pq}^* XY_{rs} \langle tq|rs \rangle
+        I_{ti} = \sum_{j} Y_{ij}^* \sum_{kl} Y_{kl} \langle tj|kl \rangle
+               + \sum_{j} Y_{ij}^* \sum_{cd} X_{cd} \langle tj|cd \rangle
+        I_{ta} = \sum_{b} X_{ab}^* \sum_{kl} Y_{kl} \langle tb|kl \rangle
+               + \sum_{b} X_{ab}^* \sum_{cd} X_{cd} \langle tb|cd \rangle
+    Args:
+        occ_y_mat: coefficients for occupied orbitals Y
+        vir_x_mat: coefficients for virtual orbitals X
+        eri_X: \sum_{cd} X_{cd} \langle tq|cd \rangle (nall, nact)
+        eri_Y: \sum_{kl} Y_{kl} \langle tq|kl \rangle (nall, nact)
+        nocc: number of active occupied orbitals.
+        nvir: number of active virtual orbitals.
+        nfrozen_occ: number of frozen occupied orbitals.
+        nfrozen_vir: number of frozen virtual orbitals.
+        label1: label for the first index t
+        label2: label for the second index p
+    Returns:
+        out: contracted intermediates.
+    """
+    # qrs are all active space indices.
+    slice1 = choose_slice(label1, nfrozen_occ, nocc, nvir, nfrozen_vir)
+    slice_i = choose_slice('i', nfrozen_occ, nocc, nvir, nfrozen_vir)
+    slice_a = choose_slice('a', nfrozen_occ, nocc, nvir, nfrozen_vir)
+    
+    # Special cases for TDA
+    if label1 == 'p':
+        if nocc == 0:
+            label1 = 'a'
+        elif nvir == 0:
+            label1 = 'i'
+    if label2 == 'p':
+        if nocc == 0:
+            label2 = 'a'
+        elif nvir == 0:
+            label2 = 'i'
+
+    if label1 == 'i':
+        n1 = nocc
+    elif label1 == 'a':
+        n1 = nvir
+    elif label1 == 'ip':
+        n1 = nfrozen_occ
+    elif label1 == 'ap':
+        n1 = nfrozen_vir
+    else:
+        n1 = nocc + nvir
+    if label2 == 'i':
+        tmp = np.ascontiguousarray(eri_Y[slice1, :nocc] + eri_X[slice1, :nocc])  # (t,j)
+        out = np.matmul(tmp, occ_y_mat.T.conj())  # (t,j)(i,j) -> (t,i)
+    elif label2 == 'a':
+        tmp = np.ascontiguousarray(eri_Y[slice1, nocc:] + eri_X[slice1, nocc:])  # (t,b)
+        out = np.matmul(tmp, vir_x_mat.T.conj())  # (t,b)(a,b) -> (t,a)
+    elif label2 == 'p':
+        out = np.zeros((n1, nocc + nvir), dtype=occ_y_mat.dtype)
+        tmp = np.ascontiguousarray(eri_Y[slice1, :nocc] + eri_X[slice1, :nocc])  # (t,j)
+        out[:,:nocc] = np.matmul(tmp, occ_y_mat.T.conj())  # (t,j)(i,j) -> (t,i)
+        tmp = np.ascontiguousarray(eri_Y[slice1, nocc:] + eri_X[slice1, nocc:])  # (t,b)
+        out[:,nocc:] = np.matmul(tmp, vir_x_mat.T.conj())  # (t,b)(a,b) -> (t,a)
+    else:
+        raise ValueError('label2 = {}. is not valid in contraction_2rdm_Lpq'.format(label2))
 
     return out
 
@@ -403,10 +470,10 @@ def get_I_pp_int(den, occ_y_mat, vir_x_mat, mo_ene_full, Lpq_full, nocc, nvir, n
     # calculate I' first
     i_prime = np.zeros((len(mo_ene_full), len(mo_ene_full)), dtype=occ_y_mat.dtype)
     # I' active-active block
-    i_prime[slice_p, slice_p] += contraction_2rdm_eri(
+    i_prime[slice_p, slice_p] += contraction_2rdm_Lpq(
         occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'p', 'p'
     )
-    i_prime[slice_a, slice_i] += contraction_1rdm_eri_diag(
+    i_prime[slice_a, slice_i] += contraction_1rdm_Lpq_diag(
         den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'a', 'i', rhf=rhf
     )
     for p in choose_range('p', nfrozen_occ, nocc, nvir, nfrozen_vir):
@@ -414,21 +481,21 @@ def get_I_pp_int(den, occ_y_mat, vir_x_mat, mo_ene_full, Lpq_full, nocc, nvir, n
 
     if nfrozen_vir > 0:
         # I' frozen virtual-active block
-        i_prime[slice_ap, slice_p] += contraction_2rdm_eri(
+        i_prime[slice_ap, slice_p] += contraction_2rdm_Lpq(
             occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'ap', 'p'
         )
-        i_prime[slice_ap, slice_i] += contraction_1rdm_eri_diag(
+        i_prime[slice_ap, slice_i] += contraction_1rdm_Lpq_diag(
             den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'ap', 'i', rhf=rhf
         )
 
     if nfrozen_occ > 0:
         # I' frozen occupied-active block
-        i_prime[slice_ip, slice_p] += contraction_2rdm_eri(
+        i_prime[slice_ip, slice_p] += contraction_2rdm_Lpq(
             occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'ip', 'p'
         )
 
         # I' all virtual-frozen occupied block
-        i_prime[slice_A, slice_ip] += contraction_1rdm_eri_diag(
+        i_prime[slice_A, slice_ip] += contraction_1rdm_Lpq_diag(
             den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'ip', rhf=rhf
         )
 
@@ -510,7 +577,7 @@ def get_I_pp_int_chol(den, Gpq_chol, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_
     i_prime[slice_p, slice_p] += contraction_2rdm_eri_chol(
         Gpq_chol, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'p', 'p'
     )
-    i_prime[slice_a, slice_i] += contraction_1rdm_eri_diag(
+    i_prime[slice_a, slice_i] += contraction_1rdm_Lpq_diag(
         den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'a', 'i'
     )
     for p in choose_range('p', nfrozen_occ, nocc, nvir, nfrozen_vir):
@@ -520,7 +587,7 @@ def get_I_pp_int_chol(den, Gpq_chol, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_
     i_prime[slice_ap, slice_p] += contraction_2rdm_eri_chol(
         Gpq_chol, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'ap', 'p'
     )
-    i_prime[slice_ap, slice_i] += contraction_1rdm_eri_diag(
+    i_prime[slice_ap, slice_i] += contraction_1rdm_Lpq_diag(
         den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'ap', 'i'
     )
     # I' frozen occupied-active block
@@ -529,7 +596,7 @@ def get_I_pp_int_chol(den, Gpq_chol, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_
     )
 
     # I' all virtual-frozen occupied block
-    i_prime[slice_A, slice_ip] += contraction_1rdm_eri_diag(
+    i_prime[slice_A, slice_ip] += contraction_1rdm_Lpq_diag(
         den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'ip'
     )
 
@@ -561,12 +628,12 @@ def get_X_int(i_pp_A_I, d_p_I_i, d_p_A_a, Lpq_full, nocc, nvir, nfrozen_occ, nfr
         x_int: the X vector (nvir_full*nocc_full)
     """
     x_vec = i_pp_A_I.copy()
-    x_vec += contraction_1rdm_eri(d_p_I_i, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'I', 'I', 'i', rhf=rhf)
-    x_vec += contraction_1rdm_eri(
+    x_vec += contraction_1rdm_Lpq(d_p_I_i, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'I', 'I', 'i', rhf=rhf)
+    x_vec += contraction_1rdm_Lpq(
         d_p_I_i.T.conj(), Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'I', 'i', 'I', rhf=rhf
     )
-    x_vec += contraction_1rdm_eri(d_p_A_a, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'I', 'A', 'a', rhf=rhf)
-    x_vec += contraction_1rdm_eri(
+    x_vec += contraction_1rdm_Lpq(d_p_A_a, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'I', 'A', 'a', rhf=rhf)
+    x_vec += contraction_1rdm_Lpq(
         d_p_A_a.T.conj(), Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'I', 'a', 'A', rhf=rhf
     )
 
@@ -588,8 +655,8 @@ def z_vector_eqn_matvec(input_vec, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_oc
         hd_vec: the Z-vector equation matrix-vector product (nvir_full*nocc_full)
     """
     d_p_AI = input_vec.reshape(nvir + nfrozen_vir, nocc + nfrozen_occ)
-    hd_vec = contraction_1rdm_eri(d_p_AI, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'I', 'A', 'I', rhf=rhf)
-    hd_vec += contraction_1rdm_eri(
+    hd_vec = contraction_1rdm_Lpq(d_p_AI, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'I', 'A', 'I', rhf=rhf)
+    hd_vec += contraction_1rdm_Lpq(
         d_p_AI.T.conj(), Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'A', 'I', 'I', 'A', rhf=rhf
     )
     for a in choose_range('A', nfrozen_occ, nocc, nvir, nfrozen_vir):
@@ -681,9 +748,9 @@ def get_I_int(i_p, d_p, den, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_occ, nfr
     slice_a = choose_slice('a', nfrozen_occ, nocc, nvir, nfrozen_vir)
     # I all occupied-all occupied block
     i_int[slice_I, slice_I] -= (
-        0.5 * contraction_1rdm_eri_diag(den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'I', 'I', 'p', rhf=rhf).T
+        0.5 * contraction_1rdm_Lpq_diag(den, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'I', 'I', 'p', rhf=rhf).T
     )
-    i_int[slice_I, slice_I] -= contraction_1rdm_eri(
+    i_int[slice_I, slice_I] -= contraction_1rdm_Lpq(
         d_p, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'I', 'I', 'P', 'P', rhf=rhf
     ).T
     # I active virtual-all occupied block
