@@ -14,6 +14,8 @@ def kernel(pprpa):
     # initialize trial vector and product matrix
     if pprpa._use_eri:
         data_type = pprpa.vvvv.dtype
+    elif pprpa._ao_direct:
+        data_type = np.double
     else:
         if pprpa._use_Lov:
             data_type = pprpa.Lpi.dtype
@@ -32,7 +34,7 @@ def kernel(pprpa):
         tri_vec[:ntri], tri_vec_sig[:ntri] = get_identity_trial_vector(
             pprpa=pprpa, ntri=ntri)
     elif pprpa.trial == "subspace":
-        if pprpa._use_eri:
+        if pprpa._use_eri or pprpa._ao_direct:
             raise NotImplementedError("subspace init guess not implemented for eri version.")
         tri_vec[:ntri], tri_vec_sig[:ntri] = get_subspace_trial_vector(
             pprpa=pprpa, ntri=ntri, channel=pprpa.channel,
@@ -314,7 +316,42 @@ def _pprpa_contraction(pprpa, tri_vec):
         z_vv[tri_row_v, tri_col_v] = tri_vec[ivec][pprpa.oo_dim :]
         z_vv[np.diag_indices(nvir)] *= 1.0 / np.sqrt(2)
 
-        if not pprpa._use_eri:
+        if pprpa._use_eri:
+            if nvir > 0:
+                prod_vv = np.matmul(pprpa.vvvv.reshape(nvir*nvir, nvir*nvir), z_vv.T.reshape(nvir*nvir, 1))
+            if nocc > 0:
+                prod_oo = np.matmul(pprpa.oooo.reshape(nocc*nocc, nocc*nocc), z_oo.T.reshape(nocc*nocc, 1))
+            if nvir > 0 and nocc > 0:
+                prod_vv += np.matmul(pprpa.oovv.reshape(nocc*nocc, nvir*nvir).T, z_oo.T.reshape(nocc*nocc, 1))
+                prod_oo += np.matmul(pprpa.oovv.reshape(nocc*nocc, nvir*nvir), z_vv.T.reshape(nvir*nvir, 1))
+            prod_vv = prod_vv.reshape(nvir, nvir)
+            prod_oo = prod_oo.reshape(nocc, nocc)
+        elif pprpa._ao_direct:
+            assert pprpa._scf is not None, "SCF object is required for eri_ao_direct contraction."
+            if pprpa.mo_coeff is None:
+                pprpa.mo_coeff = pprpa._scf.mo_coeff[:, pprpa._scf.mol.nelectron//2 - nocc : pprpa._scf.mol.nelectron//2 + nvir]
+            mo_coeff_o = pprpa.mo_coeff[:, :nocc]
+            mo_coeff_v = pprpa.mo_coeff[:, nocc:]
+            # for real orbitals,
+            # <ab|cd> z_cd = (ac|bd) z_cd = (ac|db) z_cd = C_ma C_rb (mn|rs) C_nc C_sd z_cd
+            # <ij|kl> z_kl = (ik|jl) z_kl = (ik|lj) z_kl = C_mi C_rj (mn|rs) C_nk C_sl z_kl
+            # <ab|ij> z_ij = (ai|bj) z_ij = (ai|jb) z_ij = C_ma C_rb (mn|rs) C_ni C_sj z_ij
+            # <ij|ab> z_ab = (ia|jb) z_ab = (ia|bj) z_ab = C_mi C_rj (mn|rs) C_an C_bs z_ab
+            if nvir > 0 and nocc > 0:
+                z_vv_ao = mo_coeff_v @ z_vv.T @ mo_coeff_v.T
+                z_oo_ao = mo_coeff_o @ z_oo.T @ mo_coeff_o.T
+                K_ao = pprpa._scf.get_k(dm=z_vv_ao + z_oo_ao, hermi=0)
+                prod_vv = mo_coeff_v.T @ K_ao @ mo_coeff_v
+                prod_oo = mo_coeff_o.T @ K_ao @ mo_coeff_o
+            elif nvir > 0:
+                z_vv_ao = mo_coeff_v @ z_vv.T @ mo_coeff_v.T
+                K_vv_ao = pprpa._scf.get_k(dm=z_vv_ao, hermi=0)
+                prod_vv = mo_coeff_v.T @ K_vv_ao @ mo_coeff_v
+            elif nocc > 0:
+                z_oo_ao = mo_coeff_o @ z_oo.T @ mo_coeff_o.T
+                K_oo_ao = pprpa._scf.get_k(dm=z_oo_ao, hermi=0)
+                prod_oo = mo_coeff_o.T @ K_oo_ao @ mo_coeff_o
+        else: # use Lpq
             # Lpqz_{L,pr} = \sum_s Lpq_{L,ps} z_{rs}
             Lpq_z = np.zeros(shape=[naux * nmo, nmo], dtype=np.double)
             if pprpa._use_Lov is True:
@@ -336,16 +373,7 @@ def _pprpa_contraction(pprpa, tri_vec):
                 prod_vv = Lpq_z[nocc:] @ Lpa.reshape(naux * nmo, nvir)
             else:
                 prod_vv = Lpq_z[nocc:] @ Lpq[:, :, nocc:].reshape(naux * nmo, nvir)
-        else: # use eri
-            if nvir > 0:
-                prod_vv = np.matmul(pprpa.vvvv.reshape(nvir*nvir, nvir*nvir), z_vv.T.reshape(nvir*nvir, 1))
-            if nocc > 0:
-                prod_oo = np.matmul(pprpa.oooo.reshape(nocc*nocc, nocc*nocc), z_oo.T.reshape(nocc*nocc, 1))
-            if nvir > 0 and nocc > 0:
-                prod_vv += np.matmul(pprpa.oovv.reshape(nocc*nocc, nvir*nvir).T, z_oo.T.reshape(nocc*nocc, 1))
-                prod_oo += np.matmul(pprpa.oovv.reshape(nocc*nocc, nvir*nvir), z_vv.T.reshape(nvir*nvir, 1))
-            prod_vv = prod_vv.reshape(nvir, nvir)
-            prod_oo = prod_oo.reshape(nocc, nocc)
+
 
         if pprpa.multi == "s":
             prod_vv += prod_vv.T
@@ -792,6 +820,9 @@ class ppRPA_Davidson():
         self.Lpi = None  # Lpi = Lpq[:, :, :nocc], C-contiguous
         self.Lpa = None  # Lpa = Lpq[:, :, nocc:], C-contiguous
         self._use_eri = False # use four-index ERI tensor directly
+        self._ao_direct = False # use four-index from fock builder
+        self.mo_coeff = None # molecular orbital coefficients
+        self._scf = None  # SCF object, needed when using eri in AO basis
 
         # options
         self.channel = channel  # channel of desired states, particle-particle or hole-hole
@@ -885,6 +916,9 @@ class ppRPA_Davidson():
         if self._use_eri:
             mem = (self.nocc**4 + self.nvir**4 + self.nocc**2 * self.nvir**2 + \
                 3 * self.max_vec * self.full_dim)\
+                * 8 / 1.0e6
+        elif self._ao_direct:
+            mem = (3 * self.max_vec * self.full_dim)\
                 * 8 / 1.0e6
         else:
             mem = (

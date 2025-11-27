@@ -45,7 +45,7 @@ def grad_elec(pprpa_grad, xy, mult, atmlst=None):
         # aux_response is Ture by default in DFHF
         # To my opinion, aux_response should always be True for DFHF
         aux_response = mf_grad.auxbasis_response
-    elif not pprpa._use_eri:
+    elif not pprpa._use_eri and not pprpa._ao_direct:
         print(
             'Warning:   The analytical gradient of the ppRPA must be used with the density\n\
             fitting mean-field method. The calculation will proceed but the analytical\n\
@@ -218,6 +218,15 @@ def make_rdm1_relaxed_rhf_pprpa(pprpa, mf, xy=None, mult='t', istate=0, cphf_max
         eri_full = None
         X_eri = np.matmul(eri_vv.reshape(-1, nvir*nvir), vir_x_mat.reshape(-1)).reshape(-1, nocc+nvir)
         Y_eri = np.matmul(eri_oo.reshape(-1, nocc*nocc), occ_y_mat.reshape(-1)).reshape(-1, nocc+nvir)
+    elif pprpa._ao_direct:
+        hermi = 1 if mult == 's' else 2
+        mo_ene_full = mf.mo_energy
+        X_ao = orba @ vir_x_mat @ orba.T
+        X_eri = mf.get_k(dm=X_ao, hermi=hermi)
+        X_eri = mf.mo_coeff.T @ X_eri @ orbp
+        Y_ao = orbi @ occ_y_mat @ orbi.T
+        Y_eri = mf.get_k(dm=Y_ao, hermi=hermi)
+        Y_eri = mf.mo_coeff.T @ Y_eri @ orbp
     else:
         if nfrozen_occ > 0 or nfrozen_vir > 0:
             _, mo_ene_full, Lpq_full = pyscf_util.get_pyscf_input_mol(mf)
@@ -235,7 +244,7 @@ def make_rdm1_relaxed_rhf_pprpa(pprpa, mf, xy=None, mult='t', istate=0, cphf_max
     # calculate I' first
     i_prime = np.zeros((len(mo_ene_full), len(mo_ene_full)), dtype=occ_y_mat.dtype)
     # I' active-active block
-    if not pprpa._use_eri:
+    if not pprpa._use_eri and not pprpa._ao_direct:
         i_prime[slice_p, slice_p] += contraction_2rdm_Lpq(
             occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'p', 'p'
         )
@@ -249,7 +258,7 @@ def make_rdm1_relaxed_rhf_pprpa(pprpa, mf, xy=None, mult='t', istate=0, cphf_max
 
     if nfrozen_vir > 0:
         # I' frozen virtual-active block
-        if not pprpa._use_eri:
+        if not pprpa._use_eri and not pprpa._ao_direct:
             i_prime[slice_ap, slice_p] += contraction_2rdm_Lpq(
                 occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'ap', 'p'
             )
@@ -260,7 +269,7 @@ def make_rdm1_relaxed_rhf_pprpa(pprpa, mf, xy=None, mult='t', istate=0, cphf_max
         i_prime[slice_ap, slice_i] += veff_den_u[slice_ap, slice_i]
     if nfrozen_occ > 0:
         # I' frozen occupied-active block
-        if not pprpa._use_eri:
+        if not pprpa._use_eri and not pprpa._ao_direct:
             i_prime[slice_ip, slice_p] += contraction_2rdm_Lpq(
                 occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, 'ip', 'p'
             )

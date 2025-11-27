@@ -78,12 +78,12 @@ def make_tdm1(xy1, xy2, oo_dim, mult='t'):
         tdm = np.einsum('ac,bc->ab', vir_x_mat1.conj(), vir_x_mat2).T
         diagonal_correction = np.einsum('ab,ab->', vir_x_mat1.conj(), vir_x_mat2)
     elif vv_dim == 0:
-        tdm = np.einsum('ik,jk->ij', occ_y_mat1.conj(), occ_y_mat2)
+        tdm = -np.einsum('ik,jk->ij', occ_y_mat1.conj(), occ_y_mat2)
         diagonal_correction = np.einsum('ij,ij->', occ_y_mat1.conj(), occ_y_mat2)
     else:
         print('Warning: TDM is not well-defined for pp-RPA with both DEA and DIP blocks.')
         tdm_v = np.einsum('ac,bc->ab', vir_x_mat1.conj(), vir_x_mat2).T
-        tdm_o = np.einsum('ik,jk->ij', occ_y_mat1.conj(), occ_y_mat2)
+        tdm_o = -np.einsum('ik,jk->ij', occ_y_mat1.conj(), occ_y_mat2)
         diagonal_correction = np.einsum('ab,ab->', vir_x_mat1.conj(), vir_x_mat2) + np.einsum(
             'ij,ij->', occ_y_mat1.conj(), occ_y_mat2
         )
@@ -286,7 +286,19 @@ def contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ
     slice_i = choose_slice('i', nfrozen_occ, nocc, nvir, nfrozen_vir)
     slice_a = choose_slice('a', nfrozen_occ, nocc, nvir, nfrozen_vir)
     naux = Lpq_full.shape[0]
-    is_complex = occ_y_mat.dtype == np.complex128
+    
+    # Special cases for TDA
+    if label1 == 'p':
+        if nocc == 0:
+            label1 = 'a'
+        elif nvir == 0:
+            label1 = 'i'
+    if label2 == 'p':
+        if nocc == 0:
+            label2 = 'a'
+        elif nvir == 0:
+            label2 = 'i'
+
     if label1 == 'i':
         n1 = nocc
     elif label1 == 'a':
@@ -314,35 +326,37 @@ def contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ
         tmp = np.matmul(L1i, Lij)  # (t,Pl)(Pl,j)->(t,j)
         out = np.matmul(tmp, occ_y_mat.T.conj())  # (t,j)(j,i) -> (t,i)
 
-        L1a = np.ascontiguousarray(Lpq_full[:, slice1, slice_a]).reshape(-1, nvir)  # (Pt,c)
-        Lai = np.ascontiguousarray(Lpq_full[:, slice_a, slice_i]).reshape(-1, nocc).conj()  # (P,d,j)*->(Pd,j)
-        L1a = np.matmul(L1a, vir_x_mat).reshape(naux, n1, nvir)  # (Pt,c)(c,d)->(P,t,d)
-        L1a = L1a.transpose(1, 0, 2).reshape(n1, -1)  # (P,t,d)->(t,Pd)
-        tmp = np.matmul(L1a, Lai)  # (t,Pd)(Pd,j)->(t,j)
-        out += np.matmul(tmp, occ_y_mat.T.conj())  # (t,j)(j,i) -> (t,i)
+        if nvir > 0:
+            L1a = np.ascontiguousarray(Lpq_full[:, slice1, slice_a]).reshape(-1, nvir)  # (Pt,c)
+            Lai = np.ascontiguousarray(Lpq_full[:, slice_a, slice_i]).reshape(-1, nocc).conj()  # (P,d,j)*->(Pd,j)
+            L1a = np.matmul(L1a, vir_x_mat).reshape(naux, n1, nvir)  # (Pt,c)(c,d)->(P,t,d)
+            L1a = L1a.transpose(1, 0, 2).reshape(n1, -1)  # (P,t,d)->(t,Pd)
+            tmp = np.matmul(L1a, Lai)  # (t,Pd)(Pd,j)->(t,j)
+            out += np.matmul(tmp, occ_y_mat.T.conj())  # (t,j)(j,i) -> (t,i)
     elif label2 == 'a':
         # Slow but more readable version
-        # out = np.einsum("ab,kl,Ptk,Pbl->ta", vir_x_mat.conj(), occ_y_mat,
-        #                 Lpq_full[:,slice1,slice_i],
-        #                 Lpq_full[:,slice_a,slice_i],
-        #                 optimize=True)
-        # out+= np.einsum("ab,cd,Ptc,Pbd->ta", vir_x_mat.conj(), vir_x_mat,
+        # out = np.einsum("ab,cd,Ptc,Pbd->ta", vir_x_mat.conj(), vir_x_mat,
         #                 Lpq_full[:,slice1,slice_a],
         #                 Lpq_full[:,slice_a,slice_a],
         #                 optimize=True)
-        L1i = np.ascontiguousarray(Lpq_full[:, slice1, slice_i]).reshape(-1, nocc)  # (Pt,k)
-        Lia = np.ascontiguousarray(Lpq_full[:, slice_i, slice_a]).reshape(-1, nvir).conj()  # (P,l,b)*->(Pl,b)
-        L1i = np.matmul(L1i, occ_y_mat).reshape(naux, n1, nocc)  # (Pt,k)(k,l)->(P,t,l)
-        L1i = L1i.transpose(1, 0, 2).reshape(n1, -1)  # (P,t,l)->(t,Pl)
-        tmp = np.matmul(L1i, Lia)  # (t,Pl)(Pl,b)->(t,b)
-        out = np.matmul(tmp, vir_x_mat.T.conj())  # (t,b)(b,a) -> (t,a)
-
+        # out+= np.einsum("ab,kl,Ptk,Pbl->ta", vir_x_mat.conj(), occ_y_mat,
+        #                 Lpq_full[:,slice1,slice_i],
+        #                 Lpq_full[:,slice_a,slice_i],
+        #                 optimize=True)
         L1a = np.ascontiguousarray(Lpq_full[:, slice1, slice_a]).reshape(-1, nvir)  # (Pt,c)
         Lab = np.ascontiguousarray(Lpq_full[:, slice_a, slice_a]).reshape(-1, nvir).conj()  # (P,b,d)*->(Pd,b)
         L1a = np.matmul(L1a, vir_x_mat).reshape(naux, n1, nvir)  # (Pt,c)(c,d)->(P,t,d)
         L1a = L1a.transpose(1, 0, 2).reshape(n1, -1)  # (P,t,d)->(t,Pd)
         tmp = np.matmul(L1a, Lab)  # (t,Pd)(Pd,b)->(t,b)
-        out += np.matmul(tmp, vir_x_mat.T.conj())  # (t,b)(b,a) -> (t,a)
+        out = np.matmul(tmp, vir_x_mat.T.conj())  # (t,b)(b,a) -> (t,a)
+
+        if nocc > 0:
+            L1i = np.ascontiguousarray(Lpq_full[:, slice1, slice_i]).reshape(-1, nocc)  # (Pt,k)
+            Lia = np.ascontiguousarray(Lpq_full[:, slice_i, slice_a]).reshape(-1, nvir).conj()  # (P,l,b)*->(Pl,b)
+            L1i = np.matmul(L1i, occ_y_mat).reshape(naux, n1, nocc)  # (Pt,k)(k,l)->(P,t,l)
+            L1i = L1i.transpose(1, 0, 2).reshape(n1, -1)  # (P,t,l)->(t,Pl)
+            tmp = np.matmul(L1i, Lia)  # (t,Pl)(Pl,b)->(t,b)
+            out += np.matmul(tmp, vir_x_mat.T.conj())  # (t,b)(b,a) -> (t,a)
     elif label2 == 'p':
         # slow (more copies) but more readable version
         # out = np.concatenate((
@@ -373,7 +387,6 @@ def contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ
 
     return out
 
-
 def contraction_2rdm_eri(occ_y_mat, vir_x_mat, eri_X, eri_Y, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, label2):
     r"""
     Contraction in the form of (anti-symmetrized or symmetrized)
@@ -398,8 +411,6 @@ def contraction_2rdm_eri(occ_y_mat, vir_x_mat, eri_X, eri_Y, nocc, nvir, nfrozen
     """
     # qrs are all active space indices.
     slice1 = choose_slice(label1, nfrozen_occ, nocc, nvir, nfrozen_vir)
-    slice_i = choose_slice('i', nfrozen_occ, nocc, nvir, nfrozen_vir)
-    slice_a = choose_slice('a', nfrozen_occ, nocc, nvir, nfrozen_vir)
     
     # Special cases for TDA
     if label1 == 'p':
@@ -665,7 +676,7 @@ def z_vector_eqn_matvec(input_vec, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_oc
     return hd_vec.reshape(-1)
 
 
-def z_vector_eqn_solver(x_int, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, rhf=False):
+def z_vector_eqn_solver(x_int, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, rhf=False, matvec=None, print_level=0):
     """
     Solve the Z-vector equation.
     Args:
@@ -680,8 +691,9 @@ def z_vector_eqn_solver(x_int, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_occ, n
         D' intermediates (A-I block)
     """
 
-    def matvec(input_vec):
-        return z_vector_eqn_matvec(input_vec, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, rhf=rhf)
+    if matvec is None:
+        def matvec(input_vec):
+            return z_vector_eqn_matvec(input_vec, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, rhf=rhf)
 
     mat_diag = np.zeros((nvir + nfrozen_vir, nocc + nfrozen_occ), dtype=np.double)  # diagonal elements must be real
     # It is not necessary to calculate the exact diagonal elements
@@ -691,7 +703,7 @@ def z_vector_eqn_solver(x_int, mo_ene_full, Lpq_full, nocc, nvir, nfrozen_occ, n
             mat_diag[a - nfrozen_occ - nocc, i] = mo_ene_full[a] - mo_ene_full[i]
     mat_diag = mat_diag.reshape(-1)
 
-    return GMRES_Pople(matvec, mat_diag, -x_int).reshape(nvir + nfrozen_vir, nocc + nfrozen_occ)
+    return GMRES_Pople(matvec, mat_diag, -x_int, printLevel=print_level).reshape(nvir + nfrozen_vir, nocc + nfrozen_occ)
     # return GMRES_wrapper(matvec, mat_diag, -x_int).reshape(nvir+nfrozen_vir, nocc+nfrozen_occ)
 
 
@@ -1071,7 +1083,6 @@ def _contract_xc_kernel(mf, xc_code, dmvo, dmoo=None, with_vxc=True, with_kxc=Tr
     mol = mf.mol
     grids = mf.grids
 
-    from pyscf import dft
     ni = mf._numint
     xctype = ni._xc_type(xc_code)
 
