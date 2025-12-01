@@ -109,7 +109,7 @@ def get_identity_trial_vector(pprpa, ntri):
         def __init__(self):
             self.p = -1
             self.q = -1
-            self.eig_sum = max_orb_sum
+            self.eig_sum = max_orb_sum if pprpa.channel == "pp" else -max_orb_sum
 
     pairs = []
     for r in range(ntri):
@@ -155,7 +155,7 @@ def get_identity_trial_vector(pprpa, ntri):
             tri_vec[r, pprpa.oo_dim + pq] = 1.0
             tri_vec_sig[r] = 1.0
     else:
-        # find hole-hole pairs with lowest orbital energy summation
+        # find hole-hole pairs with highest orbital energy summation
         for r in range(ntri):
             for p in range(pprpa.nocc-1, -1, -1):
                 for q in range(pprpa.nocc-1, p - is_singlet, -1):
@@ -165,7 +165,7 @@ def get_identity_trial_vector(pprpa, ntri):
                             valid = False
                             break
                     if (valid is True
-                        and (mo_energy[p] + mo_energy[q]) < pairs[r].eig_sum):
+                        and (mo_energy[p] + mo_energy[q]) > pairs[r].eig_sum):
                         pairs[r].p, pairs[r].q = q, p
                         pairs[r].eig_sum = mo_energy[p] + mo_energy[q]
 
@@ -309,86 +309,120 @@ def _pprpa_contraction(pprpa, tri_vec):
     z_oo = np.zeros(shape=[nocc, nocc], dtype=np.double)
     z_vv = np.zeros(shape=[nvir, nvir], dtype=np.double)
 
-    for ivec in range(ntri):
-        # restore trial vector into full matrix
-        z_oo[tri_row_o, tri_col_o] = tri_vec[ivec][: pprpa.oo_dim]
-        z_oo[np.diag_indices(nocc)] *= 1.0 / np.sqrt(2)
-        z_vv[tri_row_v, tri_col_v] = tri_vec[ivec][pprpa.oo_dim :]
-        z_vv[np.diag_indices(nvir)] *= 1.0 / np.sqrt(2)
+    if not pprpa._ao_direct: # Lpq or eri
+        for ivec in range(ntri):
+            # restore trial vector into full matrix
+            z_oo[tri_row_o, tri_col_o] = tri_vec[ivec][: pprpa.oo_dim]
+            z_oo[np.diag_indices(nocc)] *= 1.0 / np.sqrt(2)
+            z_vv[tri_row_v, tri_col_v] = tri_vec[ivec][pprpa.oo_dim :]
+            z_vv[np.diag_indices(nvir)] *= 1.0 / np.sqrt(2)
 
-        if pprpa._use_eri:
-            if nvir > 0:
-                prod_vv = np.matmul(pprpa.vvvv.reshape(nvir*nvir, nvir*nvir), z_vv.T.reshape(nvir*nvir, 1))
-            if nocc > 0:
-                prod_oo = np.matmul(pprpa.oooo.reshape(nocc*nocc, nocc*nocc), z_oo.T.reshape(nocc*nocc, 1))
-            if nvir > 0 and nocc > 0:
-                prod_vv += np.matmul(pprpa.oovv.reshape(nocc*nocc, nvir*nvir).T, z_oo.T.reshape(nocc*nocc, 1))
-                prod_oo += np.matmul(pprpa.oovv.reshape(nocc*nocc, nvir*nvir), z_vv.T.reshape(nvir*nvir, 1))
-            prod_vv = prod_vv.reshape(nvir, nvir)
-            prod_oo = prod_oo.reshape(nocc, nocc)
-        elif pprpa._ao_direct:
-            assert pprpa._scf is not None, "SCF object is required for eri_ao_direct contraction."
-            if pprpa.mo_coeff is None:
-                pprpa.mo_coeff = pprpa._scf.mo_coeff[:, pprpa._scf.mol.nelectron//2 - nocc : pprpa._scf.mol.nelectron//2 + nvir]
-            mo_coeff_o = pprpa.mo_coeff[:, :nocc]
-            mo_coeff_v = pprpa.mo_coeff[:, nocc:]
-            # for real orbitals,
-            # <ab|cd> z_cd = (ac|bd) z_cd = (ac|db) z_cd = C_ma C_rb (mn|rs) C_nc C_sd z_cd
-            # <ij|kl> z_kl = (ik|jl) z_kl = (ik|lj) z_kl = C_mi C_rj (mn|rs) C_nk C_sl z_kl
-            # <ab|ij> z_ij = (ai|bj) z_ij = (ai|jb) z_ij = C_ma C_rb (mn|rs) C_ni C_sj z_ij
-            # <ij|ab> z_ab = (ia|jb) z_ab = (ia|bj) z_ab = C_mi C_rj (mn|rs) C_an C_bs z_ab
+            if pprpa._use_eri:
+                prod_vv = np.zeros((nvir*nvir, 1))
+                prod_oo = np.zeros((nocc*nocc, 1))
+                if nvir > 0:
+                    prod_vv += np.matmul(pprpa.vvvv.reshape(nvir*nvir, nvir*nvir), z_vv.T.reshape(nvir*nvir, 1))
+                if nocc > 0:
+                    prod_oo += np.matmul(pprpa.oooo.reshape(nocc*nocc, nocc*nocc), z_oo.T.reshape(nocc*nocc, 1))
+                if nvir > 0 and nocc > 0:
+                    prod_vv += np.matmul(pprpa.oovv.reshape(nocc*nocc, nvir*nvir).T, z_oo.T.reshape(nocc*nocc, 1))
+                    prod_oo += np.matmul(pprpa.oovv.reshape(nocc*nocc, nvir*nvir), z_vv.T.reshape(nvir*nvir, 1))
+                prod_vv = prod_vv.reshape(nvir, nvir)
+                prod_oo = prod_oo.reshape(nocc, nocc)
+            else: # use Lpq
+                # Lpqz_{L,pr} = \sum_s Lpq_{L,ps} z_{rs}
+                Lpq_z = np.zeros(shape=[naux * nmo, nmo], dtype=np.double)
+                if pprpa._use_Lov is True:
+                    Lpq_z[:, :nocc] = Lpi.reshape(naux * nmo, nocc) @ z_oo.T
+                    Lpq_z[:, nocc:] = Lpa.reshape(naux * nmo, nvir) @ z_vv.T
+                else:
+                    Lpq_z[:, :nocc] = Lpq[:, :, :nocc].reshape(naux * nmo, nocc) @ z_oo.T
+                    Lpq_z[:, nocc:] = Lpq[:, :, nocc:].reshape(naux * nmo, nvir) @ z_vv.T
+
+                # transpose and reshape for faster multiplication
+                Lpq_z = Lpq_z.reshape(naux, nmo, nmo).transpose(1, 0, 2)
+                Lpq_z = Lpq_z.reshape(nmo, naux * nmo)
+                # NOTE: here assuming Lpq[L,p,q] = Lpq[L,q,p] for real orbitals
+                if pprpa._use_Lov is True:
+                    prod_oo = Lpq_z[:nocc] @ Lpi.reshape(naux * nmo, nocc)
+                else:
+                    prod_oo = Lpq_z[:nocc] @ Lpq[:, :, :nocc].reshape(naux * nmo, nocc)
+                if pprpa._use_Lov is True:
+                    prod_vv = Lpq_z[nocc:] @ Lpa.reshape(naux * nmo, nvir)
+                else:
+                    prod_vv = Lpq_z[nocc:] @ Lpq[:, :, nocc:].reshape(naux * nmo, nvir)
+
+
+            if pprpa.multi == "s":
+                prod_vv += prod_vv.T
+                prod_oo += prod_oo.T
+            else:
+                prod_vv -= prod_vv.T
+                prod_oo -= prod_oo.T
+            # rotate upper-half to lower-half matrix
+            prod_oo = prod_oo.T
+            prod_oo[np.diag_indices(nocc)] *= 1.0 / np.sqrt(2)
+            prod_vv = prod_vv.T
+            prod_vv[np.diag_indices(nvir)] *= 1.0 / np.sqrt(2)
+
+            mv_prod[ivec][: pprpa.oo_dim] = prod_oo[tri_row_o, tri_col_o]
+            mv_prod[ivec][pprpa.oo_dim :] = prod_vv[tri_row_v, tri_col_v]
+    else:
+        dms = []
+        assert pprpa._scf is not None, "SCF object is required for eri_ao_direct contraction."
+        if pprpa.mo_coeff is None:
+            pprpa.mo_coeff = pprpa._scf.mo_coeff[:, pprpa._scf.mol.nelectron//2 - nocc : pprpa._scf.mol.nelectron//2 + nvir]
+        mo_coeff_o = pprpa.mo_coeff[:, :nocc]
+        mo_coeff_v = pprpa.mo_coeff[:, nocc:]
+        # for real orbitals,
+        # <ab|cd> z_cd = (ac|bd) z_cd = (ac|db) z_cd = C_ma C_rb (mn|rs) C_nc C_sd z_cd
+        # <ij|kl> z_kl = (ik|jl) z_kl = (ik|lj) z_kl = C_mi C_rj (mn|rs) C_nk C_sl z_kl
+        # <ab|ij> z_ij = (ai|bj) z_ij = (ai|jb) z_ij = C_ma C_rb (mn|rs) C_ni C_sj z_ij
+        # <ij|ab> z_ab = (ia|jb) z_ab = (ia|bj) z_ab = C_mi C_rj (mn|rs) C_an C_bs z_ab
+        for ivec in range(ntri):
+            z_oo[tri_row_o, tri_col_o] = tri_vec[ivec][: pprpa.oo_dim]
+            z_oo[np.diag_indices(nocc)] *= 1.0 / np.sqrt(2)
+            z_vv[tri_row_v, tri_col_v] = tri_vec[ivec][pprpa.oo_dim :]
+            z_vv[np.diag_indices(nvir)] *= 1.0 / np.sqrt(2)
             if nvir > 0 and nocc > 0:
                 z_vv_ao = mo_coeff_v @ z_vv.T @ mo_coeff_v.T
                 z_oo_ao = mo_coeff_o @ z_oo.T @ mo_coeff_o.T
-                K_ao = pprpa._scf.get_k(dm=z_vv_ao + z_oo_ao, hermi=0)
-                prod_vv = mo_coeff_v.T @ K_ao @ mo_coeff_v
-                prod_oo = mo_coeff_o.T @ K_ao @ mo_coeff_o
+                dms.append(z_vv_ao + z_oo_ao)
             elif nvir > 0:
                 z_vv_ao = mo_coeff_v @ z_vv.T @ mo_coeff_v.T
-                K_vv_ao = pprpa._scf.get_k(dm=z_vv_ao, hermi=0)
-                prod_vv = mo_coeff_v.T @ K_vv_ao @ mo_coeff_v
+                dms.append(z_vv_ao)
             elif nocc > 0:
                 z_oo_ao = mo_coeff_o @ z_oo.T @ mo_coeff_o.T
-                K_oo_ao = pprpa._scf.get_k(dm=z_oo_ao, hermi=0)
-                prod_oo = mo_coeff_o.T @ K_oo_ao @ mo_coeff_o
-        else: # use Lpq
-            # Lpqz_{L,pr} = \sum_s Lpq_{L,ps} z_{rs}
-            Lpq_z = np.zeros(shape=[naux * nmo, nmo], dtype=np.double)
-            if pprpa._use_Lov is True:
-                Lpq_z[:, :nocc] = Lpi.reshape(naux * nmo, nocc) @ z_oo.T
-                Lpq_z[:, nocc:] = Lpa.reshape(naux * nmo, nvir) @ z_vv.T
-            else:
-                Lpq_z[:, :nocc] = Lpq[:, :, :nocc].reshape(naux * nmo, nocc) @ z_oo.T
-                Lpq_z[:, nocc:] = Lpq[:, :, nocc:].reshape(naux * nmo, nvir) @ z_vv.T
-    
-            # transpose and reshape for faster multiplication
-            Lpq_z = Lpq_z.reshape(naux, nmo, nmo).transpose(1, 0, 2)
-            Lpq_z = Lpq_z.reshape(nmo, naux * nmo)
-            # NOTE: here assuming Lpq[L,p,q] = Lpq[L,q,p] for real orbitals
-            if pprpa._use_Lov is True:
-                prod_oo = Lpq_z[:nocc] @ Lpi.reshape(naux * nmo, nocc)
-            else:
-                prod_oo = Lpq_z[:nocc] @ Lpq[:, :, :nocc].reshape(naux * nmo, nocc)
-            if pprpa._use_Lov is True:
-                prod_vv = Lpq_z[nocc:] @ Lpa.reshape(naux * nmo, nvir)
-            else:
-                prod_vv = Lpq_z[nocc:] @ Lpq[:, :, nocc:].reshape(naux * nmo, nvir)
+                dms.append(z_oo_ao)
 
+        K_ao = pprpa._scf.get_k(dm=dms, hermi=0)
+        if K_ao.ndim == 2: # special case when only one dm
+            K_ao = K_ao.reshape(1, K_ao.shape[0], K_ao.shape[1])
+        for ivec in range(ntri):
+            prod_vv = np.zeros((nvir, nvir))
+            prod_oo = np.zeros((nocc, nocc))
+            if nvir > 0 and nocc > 0:
+                prod_vv += mo_coeff_v.T @ K_ao[ivec] @ mo_coeff_v
+                prod_oo += mo_coeff_o.T @ K_ao[ivec] @ mo_coeff_o
+            elif nvir > 0:
+                prod_vv += mo_coeff_v.T @ K_ao[ivec] @ mo_coeff_v
+            elif nocc > 0:
+                prod_oo += mo_coeff_o.T @ K_ao[ivec] @ mo_coeff_o
+            if pprpa.multi == "s":
+                prod_vv += prod_vv.T
+                prod_oo += prod_oo.T
+            else:
+                prod_vv -= prod_vv.T
+                prod_oo -= prod_oo.T
+            # rotate upper-half to lower-half matrix
+            prod_oo = prod_oo.T
+            prod_oo[np.diag_indices(nocc)] *= 1.0 / np.sqrt(2)
+            prod_vv = prod_vv.T
+            prod_vv[np.diag_indices(nvir)] *= 1.0 / np.sqrt(2)
 
-        if pprpa.multi == "s":
-            prod_vv += prod_vv.T
-            prod_oo += prod_oo.T
-        else:
-            prod_vv -= prod_vv.T
-            prod_oo -= prod_oo.T
-        # rotate upper-half to lower-half matrix
-        prod_oo = prod_oo.T
-        prod_oo[np.diag_indices(nocc)] *= 1.0 / np.sqrt(2)
-        prod_vv = prod_vv.T
-        prod_vv[np.diag_indices(nvir)] *= 1.0 / np.sqrt(2)
+            mv_prod[ivec][: pprpa.oo_dim] = prod_oo[tri_row_o, tri_col_o]
+            mv_prod[ivec][pprpa.oo_dim :] = prod_vv[tri_row_v, tri_col_v]
 
-        mv_prod[ivec][: pprpa.oo_dim] = prod_oo[tri_row_o, tri_col_o]
-        mv_prod[ivec][pprpa.oo_dim :] = prod_vv[tri_row_v, tri_col_v]
 
     # orbital energy contribution
     orb_sum_oo = mo_energy[None, :nocc] + mo_energy[:nocc, None]
