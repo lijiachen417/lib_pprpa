@@ -75,6 +75,7 @@ def pprpaobj(mf, channel, **kwargs):
     mo_energy = mo_ene[nfrozen_occ:vir_act_idx]
 
     pprpa = cls(nocc, mo_energy, Lpq=Lpq, channel=channel, nroot=nroot, residue_thresh=1e-12, checkpoint_file=checkpoint, trial=trial)
+    pprpa.work_mem_gb = kwargs.get("work_mem_gb", None)
     pprpa.cell = mol
 
     pprpa.mu = 0.0

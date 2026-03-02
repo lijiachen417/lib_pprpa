@@ -223,7 +223,7 @@ class BenchmarkRunner:
         )
 
 
-def setup_pprpa(mol, xc='B3LYP', use_df=True, mult='s'):
+def setup_pprpa(mol, xc='B3LYP', use_df=True, mult='s', **kwargs):
     """
     Set up ppRPA calculation for a molecule.
     
@@ -245,7 +245,8 @@ def setup_pprpa(mol, xc='B3LYP', use_df=True, mult='s'):
     
     # Set up ppRPA
     nocc, mo_energy, Lpq = pyscf_util.get_pyscf_input_mol(mf)
-    pp = pprpaobj(mf, 'pp', Lpq=Lpq, nroot=1)
+    nroot = kwargs.get("nroot", 1)
+    pp = pprpaobj(mf, 'pp', Lpq=Lpq, nroot=nroot)
     pp.kernel(mult)
     
     xy = pp.xy_s[0] if mult == 's' else pp.xy_t[0]
