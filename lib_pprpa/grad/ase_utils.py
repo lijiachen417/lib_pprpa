@@ -52,6 +52,8 @@ def pprpaobj(mf, channel, **kwargs):
     checkpoint = kwargs.get("checkpoint", None)
     max_mem = kwargs.get("max_mem", None)
     trial = kwargs.get("trial", "identity")
+    Lpq = kwargs.get("Lpq", None)
+    cls = kwargs.get("cls", ppRPA_Davidson)
     full_nocc = nocc
     nmo = nocc + nvir
 
@@ -72,25 +74,36 @@ def pprpaobj(mf, channel, **kwargs):
     vir_act_idx = full_nocc + nvir
     mo_energy = mo_ene[nfrozen_occ:vir_act_idx]
 
-    pprpa = ppRPA_Davidson(nocc, mo_energy, Lpq=None, channel=channel, nroot=nroot, residue_thresh=1e-12, checkpoint_file=checkpoint, trial=trial)
+    pprpa = cls(nocc, mo_energy, Lpq=Lpq, channel=channel, nroot=nroot, residue_thresh=1e-12, checkpoint_file=checkpoint, trial=trial)
     pprpa.cell = mol
+
+    pprpa.mu = 0.0
+    if Lpq is not None:
+        return pprpa
 
     # One can use either the MO eri or the ao direct approach.
     # For small active spaces, MO eri should be faster.
     if mo_eri:
-        if max_mem is not None:
-            mf.with_df.max_memory = max_mem
-        eri = mf.with_df.get_mo_eri(mf.mo_coeff, compact=False)
-        eri = eri.reshape(nmo, nmo, nmo, nmo).transpose(0, 2, 1, 3)
-        vvvv = eri[full_nocc:vir_act_idx, full_nocc:vir_act_idx, full_nocc:vir_act_idx, full_nocc:vir_act_idx]
-        oovv = eri[nfrozen_occ:full_nocc, nfrozen_occ:full_nocc, full_nocc:vir_act_idx, full_nocc:vir_act_idx]
-        oooo = eri[nfrozen_occ:full_nocc, nfrozen_occ:full_nocc, nfrozen_occ:full_nocc, nfrozen_occ:full_nocc]
+        from pyscf.pbc.df.fft import FFTDF
+        if hasattr(mf, "with_df") and isinstance(mf.with_df, FFTDF):
+            from lib_pprpa.pyscf_util import start_clock, stop_clock
+            start_clock("Creating MO eri")
+            if max_mem is not None:
+                mf.with_df.max_memory = max_mem
+            eri = mf.with_df.get_mo_eri(mf.mo_coeff, compact=False)
+            eri = eri.reshape(nmo, nmo, nmo, nmo).transpose(0, 2, 1, 3)
+            vvvv = eri[full_nocc:vir_act_idx, full_nocc:vir_act_idx, full_nocc:vir_act_idx, full_nocc:vir_act_idx]
+            oovv = eri[nfrozen_occ:full_nocc, nfrozen_occ:full_nocc, full_nocc:vir_act_idx, full_nocc:vir_act_idx]
+            oooo = eri[nfrozen_occ:full_nocc, nfrozen_occ:full_nocc, nfrozen_occ:full_nocc, nfrozen_occ:full_nocc]
+            stop_clock("Creating MO eri")
+        else:
+            from lib_pprpa.pyscf_util import get_pyscf_input_mol_eri_r
+            nocc, mo_energy, vvvv, oooo, oovv = get_pyscf_input_mol_eri_r(mf, nocc_act=nocc, nvir_act=nvir)
         pprpa.use_eri(vvvv, oovv, oooo)
     else:
         pprpa._ao_direct = True
         pprpa._scf = mf
-    
-    pprpa.mu = 0.0
+
     return pprpa
 
 def pprpa_energy(cell, with_extras=False, **kwargs):
@@ -117,7 +130,9 @@ def pprpa_energy(cell, with_extras=False, **kwargs):
 def pprpa_grad(cell, **kwargs):
     e, mp, mf, mult, istate = pprpa_energy(cell, with_extras=True, **kwargs)
     from lib_pprpa.grad import pprpa_gamma
+    cphf_max_cycle = kwargs.get("cphf_max_cycle", 50)
     mpg = mp.Gradients(mf, mult, istate)
+    mpg.cphf_max_cycle = cphf_max_cycle
     mpg.kernel()
     return e, mpg.de
 
@@ -169,7 +184,7 @@ class ASE_calculator(Calculator):
             self.results['energy'] = e_tot * HARTREE2EV
         else:
             raise NotImplementedError("Only energy and forces are implemented for ppRPA calculator.")
-        
+
 def kernel(cell, grad_func, ene_func=None, logfile=None, fmax=0.05, max_steps=100, **kwargs):
     '''Optimize the geometry using ASE.
     '''
