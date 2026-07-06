@@ -17,16 +17,20 @@ Reference:
         J. Phys. Chem. Lett. 2021, 12, 6203-6210.
 """
 
-from functools import reduce
 import numpy as np
 import scipy
 import time
+
+try:
+    import numexpr as ne
+except ImportError:
+    ne = None
 
 from pyscf import dft, scf, df, lib
 from pyscf.ao2mo import _ao2mo
 
 from lib_pprpa.pprpa_direct import diagonalize_pprpa_singlet, diagonalize_pprpa_triplet
-from lib_pprpa.pprpa_util import get_chemical_potential
+from lib_pprpa.pprpa_util import get_chemical_potential, start_clock, stop_clock
 
 
 # =============================================================================
@@ -173,18 +177,9 @@ def get_transition_density(multi, nocc, nvir, xy, Lpq):
     return rho
 
 
-def get_sigma(nocc, mo_energy, mo_energy_ref, exci, rho, oo_dim, mu,
-              eta=1.0e-5, fullsigma=False):
-    r"""Get the real part of the T-matrix correlation self-energy
-    for one spin channel (singlet or triplet).
-
-    The self-energy is:
-    Sigma_c(p) = sum_{m,q} rho_m(p,q)^2 * (e_p + e_q - 2*mu - Omega_m)
-                 / ((e_p + e_q - 2*mu - Omega_m)^2 + eta^2)
-
-    where:
-    - For m in hh sector (m < oo_dim): only q in virtual space contributes
-    - For m in pp sector (m >= oo_dim): only q in occupied space contributes
+def get_sigma(nocc, mo_energy, mo_energy_ref, exci, rho, oo_dim, mu, eta=1.0e-5, fullsigma=False, mode="b"):
+    r"""Get the real part of the T-matrix correlation self-energy for singlet or triplet channel.
+    mode 'a' and 'b' correspond to equation 10 and 11 in doi.org/10.1103/PhysRevB.76.165106
 
     Parameters
     ----------
@@ -206,6 +201,8 @@ def get_sigma(nocc, mo_energy, mo_energy_ref, exci, rho, oo_dim, mu,
         Broadening parameter. Default 1.0e-5.
     fullsigma : bool, optional
         If True, compute full self-energy matrix. Default False (diagonal only).
+    mode : str, optional
+        Mode for off-diagonal elements, by default "b"
 
     Returns
     -------
@@ -213,69 +210,38 @@ def get_sigma(nocc, mo_energy, mo_energy_ref, exci, rho, oo_dim, mu,
         Correlation self-energy. Diagonal matrix if fullsigma is False.
     """
     nmo = len(mo_energy)
-    nroot = len(exci)
     eta2 = (3.0 * eta) ** 2
-    nvir = nmo - nocc
 
     if fullsigma is False:
         sigma_diag = np.zeros(nmo)
-        # m < oo_dim: q in virtual space (q >= nocc)
+        # hole-hole
         exci_hh = exci[:oo_dim]
-        rho_hh = rho[:oo_dim, :, nocc:]  # (oo_dim, nmo, nvir)
-        ediff = mo_energy[:, None, None] + mo_energy_ref[None, None, nocc:] - 2.0 * mu - exci_hh[None, :, None]
-        contrib = (rho_hh.transpose(1, 0, 2) ** 2) * ediff / (ediff ** 2 + eta2)
-        sigma_diag += np.sum(contrib, axis=(1, 2))
+        rho_hh = rho[:oo_dim, :, nocc:]
+        ediff = mo_energy[None, :, None] + mo_energy_ref[None, None, nocc:] - 2.0 * mu - exci_hh[:, None, None]
+        if ne is not None:
+            contrib = ne.evaluate('(rho_hh ** 2) * ediff / (ediff ** 2 + eta2)')
+        else:
+            contrib = np.square(rho_hh) * ediff / (np.square(ediff) + eta2)
+        sigma_diag += np.sum(contrib, axis=(0, 2))
 
-        # m >= oo_dim: q in occupied space (q < nocc)
+        # particle-particle
         exci_pp = exci[oo_dim:]
-        rho_pp = rho[oo_dim:, :, :nocc]  # (vv_dim, nmo, nocc)
-        ediff = mo_energy[:, None, None] + mo_energy_ref[None, None, :nocc] - 2.0 * mu - exci_pp[None, :, None]
-        contrib = (rho_pp.transpose(1, 0, 2) ** 2) * ediff / (ediff ** 2 + eta2)
-        sigma_diag += np.sum(contrib, axis=(1, 2))
+        rho_pp = rho[oo_dim:, :, :nocc]
+        ediff = mo_energy[None, :, None] + mo_energy_ref[None, None, :nocc] - 2.0 * mu - exci_pp[:, None, None]
+        if ne is not None:
+            contrib = ne.evaluate('(rho_pp ** 2) * ediff / (ediff ** 2 + eta2)')
+        else:
+            contrib = np.square(rho_pp) * ediff / (np.square(ediff) + eta2)
+        sigma_diag += np.sum(contrib, axis=(0, 2))
 
         sigma = np.diag(sigma_diag)
     else:
-        sigma = np.zeros((nmo, nmo))
-        E_avg = 0.5 * (mo_energy[:, None] + mo_energy[None, :])
-        chunk_size = 500
-
-        # m < oo_dim: q >= nocc
-        exci_hh = exci[:oo_dim]
-        rho_hh = rho[:oo_dim, :, nocc:]  # (oo_dim, nmo, nvir)
-        for q_idx in range(nvir):
-            q = nocc + q_idx
-            rho_q = rho_hh[:, :, q_idx]  # (oo_dim, nmo)
-            for start in range(0, oo_dim, chunk_size):
-                end = min(start + chunk_size, oo_dim)
-                exci_chunk = exci_hh[start:end]
-                rho_chunk = rho_q[start:end]
-                ediff = E_avg[:, :, None] + mo_energy_ref[q] - 2.0 * mu - exci_chunk[None, None, :]
-                factor = ediff / (ediff ** 2 + eta2)
-                rho_t = rho_chunk.T
-                contrib = (rho_t[:, None, :] * rho_t[None, :, :]) * factor
-                sigma += np.sum(contrib, axis=2)
-
-        # m >= oo_dim: q < nocc
-        exci_pp = exci[oo_dim:]
-        rho_pp = rho[oo_dim:, :, :nocc]  # (vv_dim, nmo, nocc)
-        vv_dim = nroot - oo_dim
-        for q in range(nocc):
-            rho_q = rho_pp[:, :, q]  # (vv_dim, nmo)
-            for start in range(0, vv_dim, chunk_size):
-                end = min(start + chunk_size, vv_dim)
-                exci_chunk = exci_pp[start:end]
-                rho_chunk = rho_q[start:end]
-                ediff = E_avg[:, :, None] + mo_energy_ref[q] - 2.0 * mu - exci_chunk[None, None, :]
-                factor = ediff / (ediff ** 2 + eta2)
-                rho_t = rho_chunk.T
-                contrib = (rho_t[:, None, :] * rho_t[None, :, :]) * factor
-                sigma += np.sum(contrib, axis=2)
+        raise NotImplementedError("Full self-energy matrix computation is not implemented yet.")
 
     return sigma
 
 
-def get_sigma_derivative(nocc, mo_energy, mo_energy_ref, exci, rho, oo_dim, mu,
-                         eta=1.0e-5):
+def get_sigma_derivative(nocc, mo_energy, mo_energy_ref, exci, rho, oo_dim, mu, eta=1.0e-5):
     r"""Get the first-order derivative of the T-matrix self-energy
     with respect to frequency for one spin channel (singlet or triplet).
 
@@ -307,38 +273,38 @@ def get_sigma_derivative(nocc, mo_energy, mo_energy_ref, exci, rho, oo_dim, mu,
         First-order derivative of the correlation self-energy.
     """
     nmo = len(mo_energy)
-    nroot = len(exci)
     eta2 = (3.0 * eta) ** 2
-    nvir = nmo - nocc
     derivative = np.zeros(nmo)
 
     # m < oo_dim: q >= nocc
-    if oo_dim > 0:
-        exci_hh = exci[:oo_dim]
-        rho_hh = rho[:oo_dim, :, nocc:]
-        ediff = mo_energy[:, None, None] + mo_energy_ref[None, None, nocc:] - 2.0 * mu - exci_hh[None, :, None]
-        ediffsq = ediff ** 2
-        contrib = (rho_hh.transpose(1, 0, 2) ** 2) * (eta2 - ediffsq) / (ediffsq + eta2) ** 2
-        derivative += np.sum(contrib, axis=(1, 2))
+    exci_hh = exci[:oo_dim]
+    rho_hh = rho[:oo_dim, :, nocc:]
+    ediff = mo_energy[None, :, None] + mo_energy_ref[None, None, nocc:] - 2.0 * mu - exci_hh[:, None, None]
+    if ne is not None:
+        ediffsq = ne.evaluate('ediff ** 2')
+        contrib = ne.evaluate('(rho_hh ** 2) * (eta2 - ediffsq) / (ediffsq + eta2) ** 2')
+    else:
+        ediffsq = np.square(ediff)
+        contrib = np.square(rho_hh) * (eta2 - ediffsq) / np.square(ediffsq + eta2)
+    derivative += np.sum(contrib, axis=(0, 2))
 
     # m >= oo_dim: q < nocc
-    if nroot > oo_dim:
-        exci_pp = exci[oo_dim:]
-        rho_pp = rho[oo_dim:, :, :nocc]
-        ediff = mo_energy[:, None, None] + mo_energy_ref[None, None, :nocc] - 2.0 * mu - exci_pp[None, :, None]
-        ediffsq = ediff ** 2
-        contrib = (rho_pp.transpose(1, 0, 2) ** 2) * (eta2 - ediffsq) / (ediffsq + eta2) ** 2
-        derivative += np.sum(contrib, axis=(1, 2))
+    exci_pp = exci[oo_dim:]
+    rho_pp = rho[oo_dim:, :, :nocc]
+    ediff = mo_energy[None, :, None] + mo_energy_ref[None, None, :nocc] - 2.0 * mu - exci_pp[:, None, None]
+    if ne is not None:
+        ediffsq = ne.evaluate('ediff ** 2')
+        contrib = ne.evaluate('(rho_pp ** 2) * (eta2 - ediffsq) / (ediffsq + eta2) ** 2')
+    else:
+        ediffsq = np.square(ediff)
+        contrib = np.square(rho_pp) * (eta2 - ediffsq) / np.square(ediffsq + eta2)
+    derivative += np.sum(contrib, axis=(0, 2))
 
     return derivative
 
 
-def get_sigma_dynamic(nocc, mo_energy_ref, exci, rho, oo_dim, mu, omega,
-                      eta=1.0e-5, fullsigma=True):
-    r"""Get the dynamical T-matrix self-energy on a frequency grid.
-    Used for constructing the Green's function.
-
-    Sigma_c(p, q; w) = sum_{m, r} rho_m(p,r) * rho_m(q,r) / (w + e_r - 2*mu - Omega_m)
+def get_sigma_dynamic(nocc, mo_energy_ref, exci, rho, oo_dim, mu, omega, eta=1.0e-5, fullsigma=True):
+    r"""Get the dynamical T-matrix self-energy and Green's function on a frequency grid.
 
     Parameters
     ----------
@@ -364,59 +330,67 @@ def get_sigma_dynamic(nocc, mo_energy_ref, exci, rho, oo_dim, mu, omega,
     Returns
     -------
     sigma : complex 3d array
-        Self-energy, shape (nmo, nmo, nw) or (nmo, nmo, nw).
+        Self-energy, shape (nw, nmo, nmo).
     """
     nmo = len(mo_energy_ref)
-    nroot = len(exci)
     nw = len(omega)
+    sigma = np.zeros(shape=[nw, nmo, nmo], dtype=np.complex128)
 
-    sigma = np.zeros((nmo, nmo, nw), dtype=np.complex128)
-    chunk_size = 500
+    if fullsigma is False:
+        raise NotImplementedError
+    else:
+        exci_hh = np.ascontiguousarray(exci[:oo_dim])
+        exci_pp = np.ascontiguousarray(exci[oo_dim:])
+        rho_hh = np.ascontiguousarray(rho[:oo_dim, :, nocc:].transpose(1, 0, 2)).astype(np.complex128)
+        rho_pp = np.ascontiguousarray(rho[oo_dim:, :, :nocc].transpose(1, 0, 2)).astype(np.complex128)
+        rho_hh_tmp = np.zeros_like(rho_hh, dtype=np.complex128)
+        rho_pp_tmp = np.zeros_like(rho_pp, dtype=np.complex128)
 
-    # m < oo_dim: q >= nocc
-    if oo_dim > 0:
-        exci_hh = exci[:oo_dim]
-        rho_hh = rho[:oo_dim, :, nocc:]
-        nvir = nmo - nocc
-        for q_idx in range(nvir):
-            q = nocc + q_idx
-            rho_q = rho_hh[:, :, q_idx]
-            for start in range(0, oo_dim, chunk_size):
-                end = min(start + chunk_size, oo_dim)
-                exci_chunk = exci_hh[start:end]
-                rho_chunk = rho_q[start:end]
-                pole = omega[None, :] + mo_energy_ref[q] - 2.0 * mu - exci_chunk[:, None] - 3.0j * eta
-                if fullsigma:
-                    B = rho_chunk[:, :, None] / pole[:, None, :]
-                    B_batch = B.transpose(2, 0, 1)
-                    A_batch = rho_chunk.T[None, :, :]
-                    C_batch = np.matmul(A_batch, B_batch)
-                    sigma += C_batch.transpose(1, 2, 0)
-                else:
-                    C = (rho_chunk ** 2).T @ (1.0 / pole)
-                    sigma[np.arange(nmo), np.arange(nmo), :] += C
+        if ne is not None:
+            base_hh = ne.evaluate(
+                "mo_energy_ref - 2.0 * mu - exci_hh + 3.0j * eta",
+                local_dict={
+                    "mo_energy_ref": mo_energy_ref[None, nocc:],
+                    "mu": mu,
+                    "exci_hh": exci_hh[:, None],
+                    "eta": eta,
+                },
+            )
+            base_pp = ne.evaluate(
+                "mo_energy_ref - 2.0 * mu - exci_pp + 3.0j * eta",
+                local_dict={
+                    "mo_energy_ref": mo_energy_ref[None, :nocc],
+                    "mu": mu,
+                    "exci_pp": exci_pp[:, None],
+                    "eta": eta,
+                },
+            )
+        else:
+            base_hh = mo_energy_ref[None, nocc:] - 2.0 * mu - exci_hh[:, None] + 3.0j * eta
+            base_pp = mo_energy_ref[None, :nocc] - 2.0 * mu - exci_pp[:, None] + 3.0j * eta
 
-    # m >= oo_dim: q < nocc
-    if nroot > oo_dim:
-        exci_pp = exci[oo_dim:]
-        rho_pp = rho[oo_dim:, :, :nocc]
-        vv_dim = nroot - oo_dim
-        for q in range(nocc):
-            rho_q = rho_pp[:, :, q]
-            for start in range(0, vv_dim, chunk_size):
-                end = min(start + chunk_size, vv_dim)
-                exci_chunk = exci_pp[start:end]
-                rho_chunk = rho_q[start:end]
-                pole = omega[None, :] + mo_energy_ref[q] - 2.0 * mu - exci_chunk[:, None] - 3.0j * eta
-                if fullsigma:
-                    B = rho_chunk[:, :, None] / pole[:, None, :]
-                    B_batch = B.transpose(2, 0, 1)
-                    A_batch = rho_chunk.T[None, :, :]
-                    C_batch = np.matmul(A_batch, B_batch)
-                    sigma += C_batch.transpose(1, 2, 0)
-                else:
-                    C = (rho_chunk ** 2).T @ (1.0 / pole)
-                    sigma[np.arange(nmo), np.arange(nmo), :] += C
+        ediff_hh = np.zeros_like(base_hh, dtype=np.complex128)
+        ediff_pp = np.zeros_like(base_pp, dtype=np.complex128)
+
+        for w in range(nw):
+            if ne is not None:
+                ne.evaluate("omega + base_hh", local_dict={"omega": omega[w], "base_hh": base_hh}, out=ediff_hh)
+                ne.evaluate("omega + base_pp", local_dict={"omega": omega[w], "base_pp": base_pp}, out=ediff_pp)
+                ne.evaluate(
+                    "rho_hh / ediff_hh", local_dict={"rho_hh": rho_hh, "ediff_hh": ediff_hh[None]}, out=rho_hh_tmp
+                )
+                ne.evaluate(
+                    "rho_pp / ediff_pp", local_dict={"rho_pp": rho_pp, "ediff_pp": ediff_pp[None]}, out=rho_pp_tmp
+                )
+            else:
+                ediff_hh[:] = omega[w] + mo_energy_ref[None, nocc:] - 2.0 * mu - exci_hh[:, None] + 3.0j * eta
+                ediff_pp[:] = omega[w] + mo_energy_ref[None, :nocc] - 2.0 * mu - exci_pp[:, None] + 3.0j * eta
+                rho_hh_tmp[:] = rho_hh / ediff_hh[None]
+                rho_pp_tmp[:] = rho_pp / ediff_pp[None]
+            sigma[w] += rho_hh.reshape(nmo, -1) @ rho_hh_tmp.reshape(nmo, -1).T
+            sigma[w] += rho_pp.reshape(nmo, -1) @ rho_pp_tmp.reshape(nmo, -1).T
+
+    return sigma
 
 
 def kernel(tm):
@@ -460,21 +434,13 @@ def kernel(tm):
     tm.vk = vk
 
     # Diagonalize ppRPA for singlet and triplet channels
-    print("begin ppRPA diagonalization: singlet.", flush=True)
-    t0_cpu = time.process_time()
-    t0_wall = time.time()
+    start_clock("ppRPA diagonalization: singlet")
     exci_s, xy_s, _ = diagonalize_pprpa_singlet(nocc=nocc, mo_energy=mf_mo_energy, Lpq=tm.Lpq, mu=mu)
-    t1_cpu = time.process_time()
-    t1_wall = time.time()
-    print(f"ppRPA diagonalization: singlet. CPU time: {t1_cpu - t0_cpu:.2f} s, Wall time: {t1_wall - t0_wall:.2f} s", flush=True)
+    stop_clock("ppRPA diagonalization: singlet")
 
-    print("begin ppRPA diagonalization: triplet.", flush=True)
-    t0_cpu = time.process_time()
-    t0_wall = time.time()
+    start_clock("ppRPA diagonalization: triplet")
     exci_t, xy_t, _ = diagonalize_pprpa_triplet(nocc=nocc, mo_energy=mf_mo_energy, Lpq=tm.Lpq, mu=mu)
-    t1_cpu = time.process_time()
-    t1_wall = time.time()
-    print(f"ppRPA diagonalization: triplet. CPU time: {t1_cpu - t0_cpu:.2f} s, Wall time: {t1_wall - t0_wall:.2f} s", flush=True)
+    stop_clock("ppRPA diagonalization: triplet")
 
     tm.exci_s = exci_s
     tm.exci_t = exci_t
@@ -485,48 +451,32 @@ def kernel(tm):
     oo_dim_t = (nocc - 1) * nocc // 2
 
     # Compute transition densities
-    print("begin T-matrix transition density: singlet.", flush=True)
-    t0_cpu = time.process_time()
-    t0_wall = time.time()
+    start_clock("T-matrix transition density: singlet")
     rho_s = get_transition_density(multi='s', nocc=nocc, nvir=nvir, xy=xy_s, Lpq=tm.Lpq)
-    t1_cpu = time.process_time()
-    t1_wall = time.time()
-    print(f"T-matrix transition density: singlet. CPU time: {t1_cpu - t0_cpu:.2f} s, Wall time: {t1_wall - t0_wall:.2f} s", flush=True)
+    stop_clock("T-matrix transition density: singlet")
 
-    print("begin T-matrix transition density: triplet.", flush=True)
-    t0_cpu = time.process_time()
-    t0_wall = time.time()
+    start_clock("T-matrix transition density: triplet")
     rho_t = get_transition_density(multi='t', nocc=nocc, nvir=nvir, xy=xy_t, Lpq=tm.Lpq)
-    t1_cpu = time.process_time()
-    t1_wall = time.time()
-    print(f"T-matrix transition density: triplet. CPU time: {t1_cpu - t0_cpu:.2f} s, Wall time: {t1_wall - t0_wall:.2f} s", flush=True)
+    stop_clock("T-matrix transition density: triplet")
 
     tm.rho_s = rho_s
     tm.rho_t = rho_t
 
     # Compute self-energy
     # For restricted T-matrix: Sigma_c = Sigma_s + 3 * Sigma_t
-    print("begin T-matrix self-energy: singlet.", flush=True)
-    t0_cpu = time.process_time()
-    t0_wall = time.time()
+    start_clock("T-matrix self-energy: singlet")
     sigma_s = get_sigma(
         nocc=nocc, mo_energy=mo_energy, mo_energy_ref=mf_mo_energy,
         exci=exci_s, rho=rho_s, oo_dim=oo_dim_s, mu=mu, eta=tm.eta,
         fullsigma=False)
-    t1_cpu = time.process_time()
-    t1_wall = time.time()
-    print(f"T-matrix self-energy: singlet. CPU time: {t1_cpu - t0_cpu:.2f} s, Wall time: {t1_wall - t0_wall:.2f} s", flush=True)
+    stop_clock("T-matrix self-energy: singlet")
 
-    print("begin T-matrix self-energy: triplet.", flush=True)
-    t0_cpu = time.process_time()
-    t0_wall = time.time()
+    start_clock("T-matrix self-energy: triplet")
     sigma_t = get_sigma(
         nocc=nocc, mo_energy=mo_energy, mo_energy_ref=mf_mo_energy,
         exci=exci_t, rho=rho_t, oo_dim=oo_dim_t, mu=mu, eta=tm.eta,
         fullsigma=False)
-    t1_cpu = time.process_time()
-    t1_wall = time.time()
-    print(f"T-matrix self-energy: triplet. CPU time: {t1_cpu - t0_cpu:.2f} s, Wall time: {t1_wall - t0_wall:.2f} s", flush=True)
+    stop_clock("T-matrix self-energy: triplet")
 
     sigma = sigma_s + 3.0 * sigma_t
 
@@ -599,13 +549,12 @@ def get_g0(omega, mo_energy, eta):
     Returns
     -------
     gf0 : complex 3d array
-        Non-interacting Green's function, shape (nmo, nmo, nw).
+        Non-interacting Green's function, shape (nw, nmo, nmo).
     """
     nmo = len(mo_energy)
     nw = len(omega)
-    gf0 = np.zeros((nmo, nmo, nw), dtype=np.complex128)
-    for p in range(nmo):
-        gf0[p, p, :] = 1.0 / (omega - mo_energy[p] + 1j * eta)
+    gf0 = np.zeros(shape=[nw, nmo, nmo], dtype=np.complex128)
+    gf0[:, np.arange(nmo), np.arange(nmo)] = 1.0 / (omega[:, None] - mo_energy[None, :] + 1j * eta)
     return gf0
 
 
@@ -830,21 +779,16 @@ class TMatrix(lib.StreamObject):
         gf = np.zeros_like(gf0)
         sigma_diff = np.array(sigma, copy=True)
         if fullsigma:
-            for iw in range(len(omega)):
-                sigma_diff[:, :, iw] += self.vk - self.vxc
+            sigma_diff += self.vk - self.vxc
         else:
-            for iw in range(len(omega)):
+            for w in range(len(omega)):
                 for i in range(nmo):
-                    sigma_diff[i, i, iw] += self.vk[i, i] - self.vxc[i, i]
+                    sigma_diff[w, i, i] += self.vk[i, i] - self.vxc[i, i]
 
-        for iw in range(len(omega)):
-            if mode == 'linear':
-                gf[:, :, iw] = gf0[:, :, iw] + reduce(
-                    np.matmul,
-                    (gf0[:, :, iw], sigma_diff[:, :, iw], gf0[:, :, iw]))
-            elif mode == 'dyson':
-                gf[:, :, iw] = np.linalg.inv(
-                    np.linalg.inv(gf0[:, :, iw]) - sigma_diff[:, :, iw])
+        if mode == 'linear':
+            gf = gf0 + gf0 @ sigma_diff @ gf0
+        elif mode == 'dyson':
+            gf = np.linalg.inv(np.linalg.inv(gf0) - sigma_diff)
 
         return gf, gf0, sigma
 
