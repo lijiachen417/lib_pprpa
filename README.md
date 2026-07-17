@@ -45,7 +45,7 @@ Features
   Spin-restricted (spin-adapted), generalized
 
 * T-matrix for quasiparticle energy
-  Spin-restricted
+  Spin-restricted and spin-unrestricted
 
 References
 ----------
